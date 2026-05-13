@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-#  matrix-theme.sh — Muted green · neon accents · white · /home/deathtollz  (v6)
+#  matrix-theme.sh — Muted green base · neon accents · white · /home/deathtollz  (v5)
 # =============================================================================
 
 set -euo pipefail
@@ -10,22 +10,22 @@ USER_HOME="/home/deathtollz"
 # ── Palette ───────────────────────────────────────────────────────────────────
 BG="#0C0C0C"
 BG_ALT="#0F130F"
-FG="#33AA33"
-GREEN_BRIGHT="#00FF41"
-GREEN_DIM="#1F7A1F"
-GREEN_MID="#2A8A2A"
-WHITE="#E8FFE8"
-ALERT="#AAFF44"
+FG="#33AA33"            # muted phosphor green — body text
+GREEN_BRIGHT="#00FF41"  # neon matrix green — highlights, focused borders, accents
+GREEN_DIM="#1F7A1F"     # dim green — inactive / secondary
+GREEN_MID="#2A8A2A"     # mid green — module backgrounds, separators
+WHITE="#E8FFE8"         # soft white with the faintest green tint
+ALERT="#AAFF44"         # lime — replaces red for alerts/errors
 BLACK="#000000"
 GREY="#111811"
 
 # 256-color for p10k
-C_BRIGHT=46
-C_FG=71
-C_MID=28
-C_DARK=22
-C_WHITE=195
-C_BG=233
+C_BRIGHT=46    # #00ff00  ≈ GREEN_BRIGHT
+C_FG=71        # #5faf5f  ≈ FG
+C_MID=28       # #008700  ≈ GREEN_MID
+C_DARK=22      # #005f00  ≈ GREEN_DIM/DARK
+C_WHITE=195    # #dfffff  ≈ WHITE
+C_BG=233       # #121212  ≈ BG
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 ok()    { echo -e "\e[32m[✔]\e[0m $*"; }
@@ -95,6 +95,9 @@ EOF
 
 # =============================================================================
 # 3. KITTY
+#    color15 (bright white) = WHITE
+#    color7  (white)        = WHITE
+#    neon green on the bright slots, muted on normal slots
 # =============================================================================
 apply_kitty() {
     local cfg="$USER_HOME/.config/kitty/kitty.conf"
@@ -108,7 +111,7 @@ apply_kitty() {
 
     cat >> "$tmp" << EOF
 
-# ── Muted green + neon accents + white (v6) ───────────────────────────────────
+# ── Muted green + neon accents + white (v5) ───────────────────────────────────
 background            ${BG}
 foreground            ${FG}
 cursor                ${GREEN_BRIGHT}
@@ -116,20 +119,35 @@ cursor_text_color     ${BG}
 selection_background  ${GREEN_MID}
 selection_foreground  ${WHITE}
 
+# black / dark grey
 color0   ${BLACK}
 color8   ${GREY}
+
+# "red" slots → lime alert (no red)
 color1   #1F7A1F
 color9   ${ALERT}
+
+# green — muted normal, neon bright
 color2   ${GREEN_MID}
 color10  ${GREEN_BRIGHT}
+
+# yellow → neon green (bright) / muted (normal)
 color3   ${GREEN_DIM}
 color11  ${GREEN_BRIGHT}
+
+# blue → dark/mid green
 color4   ${GREEN_DIM}
 color12  ${GREEN_MID}
+
+# magenta → muted green
 color5   ${GREEN_MID}
 color13  ${FG}
+
+# cyan → neon
 color6   ${FG}
 color14  ${GREEN_BRIGHT}
+
+# white — actual white
 color7   ${WHITE}
 color15  ${WHITE}
 EOF
@@ -139,7 +157,7 @@ EOF
 }
 
 # =============================================================================
-# 4. BSPWM borders
+# 4. BSPWM borders — neon focused, dark inactive
 # =============================================================================
 apply_bspwm() {
     local cfg="$USER_HOME/.config/bspwm/bspwmrc"
@@ -164,7 +182,7 @@ EOF
 }
 
 # =============================================================================
-# 5. POWERLEVEL10K
+# 5. POWERLEVEL10K — neon accent on bright segments, white where white was
 # =============================================================================
 apply_p10k() {
     local cfg="$USER_HOME/.p10k.zsh"
@@ -180,7 +198,7 @@ path, C_BG, C_DARK, C_MID, C_FG, C_BRIGHT, C_WHITE = sys.argv[1:]
 BLACK_GREY = set(range(232, 256)) | {0, 16}
 GREENS     = {2,10,22,28,34,40,46,47,48,64,70,71,76,77,82,83,84,
               106,107,118,119,120,121,148,149,154,155,156,157,190,191,192,193,194}
-WHITES     = {7,15,195,231,255,254,253,252,251,250,249,248}
+WHITES     = {7, 15, 195, 231, 255, 253, 254, 252, 251, 250, 249, 248}
 
 def replace_color(m):
     prefix = m.group(1)
@@ -190,7 +208,7 @@ def replace_color(m):
     try:
         n = int(val)
     except ValueError:
-        keep = {'green','darkgreen','white'}
+        keep = {'green', 'darkgreen', 'white'}
         if val.lower() in keep:
             return m.group(0)
         return prefix + (C_DARK if is_bg else C_FG)
@@ -198,8 +216,10 @@ def replace_color(m):
     if n in BLACK_GREY or n in GREENS:
         return m.group(0)
     if n in WHITES:
+        # keep white slots as white
         return prefix + C_WHITE
 
+    # Everything else (purple, blue, red, yellow, orange...) → green
     return prefix + (C_DARK if is_bg else C_BRIGHT)
 
 pattern = re.compile(r'(POWERLEVEL9K_\w+(?:BACKGROUND|FOREGROUND)=)(\S+)')
@@ -218,91 +238,11 @@ with open(path, 'w') as f:
     f.writelines(out)
 PYEOF
 
-    ok "Powerlevel10k updated."
+    ok "Powerlevel10k updated — neon accents + white preserved."
 }
 
 # =============================================================================
-# 6. FASTFETCH — white key labels, green values, green separator
-# =============================================================================
-apply_fastfetch() {
-    local cfg_dir="$USER_HOME/.config/fastfetch"
-    local cfg="$cfg_dir/config.jsonc"
-
-    mkdir -p "$cfg_dir"
-
-    # If config exists, patch it; otherwise create a minimal one
-    if [[ -f "$cfg" ]]; then
-        backup "$cfg"
-
-        # If a display block already exists, inject the color key into it
-        if grep -q '"display"' "$cfg"; then
-            # Insert color block after "display": {
-            python3 - "$cfg" << 'PYEOF'
-import json, sys
-
-path = sys.argv[1]
-with open(path) as f:
-    # jsonc may have comments — strip them naively
-    import re
-    raw = re.sub(r'//.*', '', f.read())
-    raw = re.sub(r'/\*.*?\*/', '', raw, flags=re.DOTALL)
-
-try:
-    data = json.loads(raw)
-except Exception:
-    # Can't parse safely — append a note and bail
-    print("  fastfetch: could not parse existing config, skipping patch.")
-    sys.exit(0)
-
-data.setdefault('display', {})
-data['display'].setdefault('color', {})
-data['display']['color']['keys']      = 'white'
-data['display']['color']['separator'] = 'white'
-
-with open(path, 'w') as f:
-    json.dump(data, f, indent=4)
-PYEOF
-        else
-            # No display block — append cleanly
-            python3 - "$cfg" << 'PYEOF'
-import json, sys, re
-
-path = sys.argv[1]
-with open(path) as f:
-    raw = re.sub(r'//.*', '', f.read())
-    raw = re.sub(r'/\*.*?\*/', '', raw, flags=re.DOTALL)
-
-try:
-    data = json.loads(raw)
-except Exception:
-    print("  fastfetch: could not parse existing config, skipping patch.")
-    sys.exit(0)
-
-data['display'] = {'color': {'keys': 'white', 'separator': 'white'}}
-
-with open(path, 'w') as f:
-    json.dump(data, f, indent=4)
-PYEOF
-        fi
-    else
-        # No config at all — create a minimal one
-        cat > "$cfg" << EOF
-{
-    "display": {
-        "color": {
-            "keys":      "white",
-            "separator": "white"
-        }
-    }
-}
-EOF
-    fi
-
-    ok "Fastfetch: key labels and separator set to white."
-}
-
-# =============================================================================
-# 7. RELOAD
+# 6. RELOAD
 # =============================================================================
 reload_all() {
     local launch=""
@@ -329,7 +269,7 @@ cat << 'BANNER'
  ██║   ██║██╔══██║██║   ██║╚════██║██╔══██╗
  ╚██████╔╝██║  ██║╚██████╔╝███████║██║  ██║
   ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝
-      v6 · neon accents · white keys · no red
+      v5 · neon accents · white · no red
 BANNER
 echo -e "\e[0m"
 
@@ -338,7 +278,6 @@ apply_rofi_colors
 apply_kitty
 apply_bspwm
 apply_p10k
-apply_fastfetch
 reload_all
 
 echo ""
