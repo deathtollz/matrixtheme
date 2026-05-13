@@ -1,39 +1,45 @@
 #!/usr/bin/env bash
 # =============================================================================
-#  matrix-theme.sh — Phosphor CRT green · /home/deathtollz
-#  v3: aggressive p10k bulk color replacement, fixes purple segments
+#  matrix-theme.sh — Muted forest green · no red · /home/deathtollz  (v4)
 # =============================================================================
 
 set -euo pipefail
 
 USER_HOME="/home/deathtollz"
 
-# ── Palette ───────────────────────────────────────────────────────────────────
-BG="#080808"
-BG_ALT="#0A0F0A"
-FG="#00CC00"
-GREEN_BRIGHT="#00FF00"
-GREEN_DIM="#009900"
-GREEN_MID="#007700"
-GREEN_DARK="#003300"
+# ── Palette (matched to image 2 — muted, dark, no neon, no red) ──────────────
+#
+#   BG           very dark near-black with a faint warm tint
+#   FG           medium phosphor green — the main text colour in image 2
+#   GREEN_BRIGHT slightly brighter green — highlights, focused borders
+#   GREEN_DIM    dim green — secondary text, inactive elements
+#   GREEN_MID    mid green — separators, module backgrounds
+#   GREEN_DARK   very dark green — selection backgrounds, unfocused borders
+#   ALERT        lime-green replaces red — still distinct, no red anywhere
+#
+BG="#0C0C0C"
+BG_ALT="#0F130F"
+FG="#33AA33"
+GREEN_BRIGHT="#55CC55"
+GREEN_DIM="#1F7A1F"
+GREEN_MID="#2A8A2A"
+GREEN_DARK="#0D3B0D"
 BLACK="#000000"
-GREY="#0D150D"
-RED="#FF0000"
+GREY="#111811"
+ALERT="#AAFF44"      # lime — visible without using red
 
-# 256-color equivalents
-C_BRIGHT=46      # #00ff00
-C_FG=40          # #00d700  ≈ #00CC00
-C_DIM=34         # #00af00
-C_MID=28         # #008700
-C_DARK=22        # #005f00
-C_BG=232         # #080808
-C_BG_ALT=233     # #121212
-C_RED=9
+# 256-color equivalents for p10k
+C_BRIGHT=77          # #5fd75f  ≈ GREEN_BRIGHT
+C_FG=71              # #5faf5f  ≈ FG
+C_DIM=64             # #5f8700  ≈ GREEN_DIM
+C_MID=28             # #008700  ≈ GREEN_MID
+C_DARK=22            # #005f00  ≈ GREEN_DARK
+C_BG=233             # #121212  ≈ BG
+C_ALERT=154          # #afff00  ≈ ALERT
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
-info()  { echo -e "\e[32m[+]\e[0m $*"; }
+ok()    { echo -e "\e[32m[✔]\e[0m $*"; }
 warn()  { echo -e "\e[33m[!]\e[0m $*"; }
-ok()    { echo -e "\e[92m[✔]\e[0m $*"; }
 backup(){ [[ -f "$1" ]] && cp "$1" "$1.bak.$(date +%s)"; }
 
 # =============================================================================
@@ -51,11 +57,11 @@ foreground     = ${FG}
 foreground-alt = ${GREEN_DIM}
 primary        = ${GREEN_BRIGHT}
 secondary      = ${GREEN_MID}
-alert          = ${RED}
+alert          = ${ALERT}
 green          = ${GREEN_BRIGHT}
 yellow         = ${FG}
 orange         = ${GREEN_DIM}
-red            = ${RED}
+red            = ${ALERT}
 pink           = ${GREEN_MID}
 blue           = ${GREEN_MID}
 cyan           = ${GREEN_BRIGHT}
@@ -75,7 +81,7 @@ apply_rofi_colors() {
     while IFS= read -r -d '' cfg; do
         backup "$cfg"
         cat > "$cfg" << EOF
-/* Phosphor green theme */
+/* Muted forest green — no red */
 * {
     background:                  ${BG};
     background-alt:              ${GREY};
@@ -84,11 +90,11 @@ apply_rofi_colors() {
     border-color:                ${GREEN_BRIGHT};
     selected-normal-background:  ${GREEN_DARK};
     selected-normal-foreground:  ${GREEN_BRIGHT};
-    selected-urgent-background:  ${RED};
+    selected-urgent-background:  ${ALERT};
     selected-urgent-foreground:  ${BG};
     selected-active-background:  ${GREEN_MID};
     selected-active-foreground:  ${GREEN_BRIGHT};
-    urgent-foreground:           ${RED};
+    urgent-foreground:           ${ALERT};
     active-foreground:           ${GREEN_BRIGHT};
 }
 EOF
@@ -99,6 +105,7 @@ EOF
 
 # =============================================================================
 # 3. KITTY
+#    Matches image 2: dark bg, muted #33AA33 text, no red in palette
 # =============================================================================
 apply_kitty() {
     local cfg="$USER_HOME/.config/kitty/kitty.conf"
@@ -112,7 +119,7 @@ apply_kitty() {
 
     cat >> "$tmp" << EOF
 
-# ── Phosphor CRT green ────────────────────────────────────────────────────────
+# ── Muted forest green (image 2 match) ───────────────────────────────────────
 background            ${BG}
 foreground            ${FG}
 cursor                ${GREEN_BRIGHT}
@@ -120,20 +127,35 @@ cursor_text_color     ${BG}
 selection_background  ${GREEN_DARK}
 selection_foreground  ${GREEN_BRIGHT}
 
+# black
 color0   ${BLACK}
 color8   ${GREY}
-color1   #880000
-color9   ${RED}
+
+# "red" → lime alert (no red anywhere)
+color1   #2A7A2A
+color9   ${ALERT}
+
+# green
 color2   ${GREEN_MID}
 color10  ${GREEN_BRIGHT}
+
+# yellow → dim green
 color3   ${GREEN_DIM}
 color11  ${FG}
+
+# blue → dark green
 color4   ${GREEN_DARK}
 color12  ${GREEN_MID}
+
+# magenta → mid green
 color5   ${GREEN_MID}
 color13  ${GREEN_DIM}
+
+# cyan → bright green
 color6   ${FG}
 color14  ${GREEN_BRIGHT}
+
+# white → foreground green
 color7   ${GREEN_DIM}
 color15  ${FG}
 EOF
@@ -168,18 +190,7 @@ EOF
 }
 
 # =============================================================================
-# 5. POWERLEVEL10K — bulk replacement
-#
-#    Strategy: replace ALL *_BACKGROUND and *_FOREGROUND values that are NOT
-#    already a red/black shade. This catches purple, blue, cyan, yellow, etc.
-#    regardless of which segment they belong to.
-#
-#    Purple 256-color codes commonly used by p10k default themes:
-#      57 63 93 99 129 135 165 171 201 207 → replaced with green
-#    Blue codes: 4 12 17 18 19 20 21 24 25 26 27 31 32 33 etc.
-#    Cyan codes: 6 14 37 38 39 43 44 45 51 80 81 etc.
-#    Yellow/orange: 3 11 136 172 178 214 220 etc.
-#    We keep: red (1 9 160 196), black/grey (0 232 233 234 235 236 237 238 239 240)
+# 5. POWERLEVEL10K — bulk Python replacement, no red, muted greens
 # =============================================================================
 apply_p10k() {
     local cfg="$USER_HOME/.p10k.zsh"
@@ -187,53 +198,43 @@ apply_p10k() {
 
     backup "$cfg"
 
-    # ── Replace non-green BACKGROUND values ──────────────────────────────────
-    # Any *_BACKGROUND= that isn't already a green or black/grey shade gets
-    # mapped to a green. We do this by matching the numeric value ranges.
-
-    python3 - "$cfg" << 'PYEOF'
+    python3 - "$cfg" "$C_BG" "$C_DARK" "$C_MID" "$C_FG" "$C_BRIGHT" "$C_ALERT" << 'PYEOF'
 import re, sys
 
-path = sys.argv[1]
-with open(path) as f:
-    lines = f.readlines()
+path, C_BG, C_DARK, C_MID, C_FG, C_BRIGHT, C_ALERT = sys.argv[1:]
 
-# 256-color sets
-BLACK_GREY  = {0,232,233,234,235,236,237,238,239,240,241,242,243,244,245,246,247,248,249,250,251,252,253,254,255,16}
-RED_SHADES  = {1,9,52,88,124,160,196,197,198,199,200,201,202,203,204,205,206,207}
-GREENS      = {2,10,22,28,34,40,46,47,48,64,70,76,82,83,84,106,107,118,119,120,121,148,149,154,155,156,157,190,191,192,193,194}
-
-# Map non-green, non-black, non-red → green shade
-# Bright/foreground contexts → 40 (≈ #00CC00)
-# Background contexts → 22 (dark green) or 28 (mid green)
+# 256-color groups to keep as-is
+BLACK_GREY = set(range(232, 256)) | {0, 16}
+GREENS     = {2,10,22,28,34,40,46,47,48,64,70,71,76,77,82,83,84,
+              106,107,118,119,120,121,148,149,154,155,156,157,190,191,192,193,194}
 
 def replace_color(m):
-    prefix   = m.group(1)   # e.g. "POWERLEVEL9K_DIR_BACKGROUND="
-    val      = m.group(2)   # e.g. "57" or "blue"
-    is_bg    = 'BACKGROUND' in prefix
+    prefix = m.group(1)
+    val    = m.group(2)
+    is_bg  = 'BACKGROUND' in prefix
 
-    # Try to parse as int
     try:
         n = int(val)
     except ValueError:
-        # Named color — replace non-green names
-        named_greens = {'green','darkgreen','lime'}
-        named_keep   = {'red','darkred','black','grey','gray','white'}
-        if val.lower() in named_greens or val.lower() in named_keep:
+        # Named colors — map everything non-green to green
+        keep = {'green','darkgreen'}
+        if val.lower() in keep:
             return m.group(0)
-        return prefix + ('22' if is_bg else '40')
+        return prefix + (C_DARK if is_bg else C_FG)
 
-    if n in BLACK_GREY or n in RED_SHADES or n in GREENS:
-        return m.group(0)   # already fine, keep it
+    if n in BLACK_GREY or n in GREENS:
+        return m.group(0)
 
-    # Replace with appropriate green
-    replacement = '22' if is_bg else '40'
-    return prefix + replacement
+    # Replace with muted green (darker for backgrounds, mid for foregrounds)
+    return prefix + (C_DARK if is_bg else C_FG)
 
 pattern = re.compile(r'(POWERLEVEL9K_\w+(?:BACKGROUND|FOREGROUND)=)(\S+)')
+
+with open(path) as f:
+    lines = f.readlines()
+
 out = []
 for line in lines:
-    # Skip comments
     if line.lstrip().startswith('#'):
         out.append(line)
         continue
@@ -242,35 +243,28 @@ for line in lines:
 with open(path, 'w') as f:
     f.writelines(out)
 
-print("  p10k: bulk color replacement done.")
+print("  p10k: all non-green/non-black segments replaced.")
 PYEOF
 
-    ok "Powerlevel10k colors updated (all non-green segments replaced)."
+    ok "Powerlevel10k updated — all red/purple/blue segments replaced."
 }
 
 # =============================================================================
 # 6. RELOAD
 # =============================================================================
 reload_all() {
-    info "Reloading..."
-
     local launch=""
-    for candidate in \
-        "$USER_HOME/.config/polybar/launch.sh" \
-        "$USER_HOME/.config/bspwm/scripts/polybar.sh"
-    do
-        [[ -x "$candidate" ]] && launch="$candidate" && break
+    for c in "$USER_HOME/.config/polybar/launch.sh" \
+              "$USER_HOME/.config/bspwm/scripts/polybar.sh"; do
+        [[ -x "$c" ]] && launch="$c" && break
     done
 
     pkill -q polybar 2>/dev/null || true
     sleep 0.4
-
     [[ -n "$launch" ]] && bash "$launch" & ok "Polybar relaunched."
 
-    if command -v bspc &>/dev/null; then
-        bspc wm -r 2>/dev/null && ok "BSPWM reloaded." \
-            || warn "bspc reload failed — press Win+Alt+R."
-    fi
+    command -v bspc &>/dev/null && \
+        { bspc wm -r 2>/dev/null && ok "BSPWM reloaded." || warn "Press Win+Alt+R."; }
 }
 
 # =============================================================================
@@ -284,7 +278,7 @@ cat << 'BANNER'
  ██║   ██║██╔══██║██║   ██║╚════██║██╔══██╗
  ╚██████╔╝██║  ██║╚██████╔╝███████║██║  ██║
   ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝
-        v3 · Phosphor CRT Green · deathtollz
+        v4 · Muted Forest Green · no red
 BANNER
 echo -e "\e[0m"
 
@@ -297,11 +291,11 @@ reload_all
 
 echo ""
 echo -e "\e[32m╔══════════════════════════════════════════════════╗"
-echo -e "║  Wake up, Neo.                                   ║"
+echo -e "║  Done. No red. Only green.                       ║"
 echo -e "╚══════════════════════════════════════════════════╝\e[0m"
 echo ""
 echo -e "  \e[32mBSPWM:\e[0m   \e[1mWin + Alt + R\e[0m"
 echo -e "  \e[32mKitty:\e[0m   open a new window"
-echo -e "  \e[32mp10k:\e[0m    \e[1msource ~/.p10k.zsh\e[0m  ← fixes the prompt"
+echo -e "  \e[32mp10k:\e[0m    \e[1msource ~/.p10k.zsh\e[0m"
 echo -e "  \e[32mRofi:\e[0m    \e[1mWin + D\e[0m"
 echo ""
