@@ -1,78 +1,108 @@
 #!/usr/bin/env bash
 # =============================================================================
-#  matrix-theme.sh — Apply a Matrix green color scheme to auto-bspwm
-#  Targets: polybar, kitty, bspwm borders, rofi, powerlevel10k
+#  matrix-theme.sh — Matrix green theme for auto-bspwm (deathtollz)
+#  Targets ALL polybar themes + rofi colors, kitty, bspwm borders, p10k
 # =============================================================================
 
 set -euo pipefail
 
+USER_HOME="/home/deathtollz"
+
 # ── Matrix palette ────────────────────────────────────────────────────────────
-BG="#0D0D0D"          # near-black background
-BG2="#0A1A0A"         # slightly green-tinted black (polybar bg)
-FG="#00FF41"          # classic matrix bright green
-GREEN_DIM="#00CC33"   # dimmer green
-GREEN_MID="#008F11"   # mid green
-GREEN_DARK="#003B00"  # dark green (borders, subtle elements)
-GREEN_GLOW="#39FF14"  # neon glow green (focused borders, highlights)
+BG="#0D0D0D"
+BG_ALT="#0A1A0A"
+FG="#00FF41"
+GREEN_DIM="#00CC33"
+GREEN_MID="#008F11"
+GREEN_DARK="#003B00"
+GREEN_GLOW="#39FF14"
 BLACK="#000000"
-GREY="#1A2E1A"        # dark greenish grey
+GREY="#1A2E1A"
+RED="#FF0000"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
-info()    { echo -e "\e[32m[+]\e[0m $*"; }
-warn()    { echo -e "\e[33m[!]\e[0m $*"; }
-success() { echo -e "\e[92m[✔]\e[0m $*"; }
-backup()  { [[ -f "$1" ]] && cp "$1" "$1.bak.$(date +%s)" && info "Backed up $1"; }
+info()  { echo -e "\e[32m[+]\e[0m $*"; }
+warn()  { echo -e "\e[33m[!]\e[0m $*"; }
+ok()    { echo -e "\e[92m[✔]\e[0m $*"; }
+backup(){ [[ -f "$1" ]] && cp "$1" "$1.bak.$(date +%s)"; }
 
 # =============================================================================
-# 1. POLYBAR — ~/.config/polybar/colorblocks/colors.ini
+# 1. ALL POLYBAR colors.ini
 # =============================================================================
-apply_polybar() {
-    local cfg="$HOME/.config/polybar/colorblocks/colors.ini"
-    if [[ ! -f "$cfg" ]]; then
-        warn "Polybar config not found at $cfg — skipping."
-        return
-    fi
-
-    backup "$cfg"
-    cat > "$cfg" << EOF
+apply_polybar_colors() {
+    local count=0
+    while IFS= read -r -d '' cfg; do
+        backup "$cfg"
+        cat > "$cfg" << EOF
 [color]
-; Matrix Green Theme
-background     = ${BG2}
+background     = ${BG}
 background-alt = ${GREY}
 foreground     = ${FG}
 foreground-alt = ${GREEN_DIM}
 primary        = ${FG}
 secondary      = ${GREEN_MID}
-alert          = #FF0000
+alert          = ${RED}
 green          = ${FG}
 yellow         = ${GREEN_GLOW}
 orange         = ${GREEN_DIM}
-red            = #FF0000
+red            = ${RED}
 pink           = ${GREEN_MID}
 blue           = ${GREEN_MID}
 cyan           = ${GREEN_GLOW}
 white          = ${FG}
 black          = ${BLACK}
 EOF
-    success "Polybar colors updated."
+        (( count++ )) || true
+    done < <(find "$USER_HOME/.config/polybar" -name "colors.ini" -print0)
+    ok "Polybar: updated $count colors.ini files."
 }
 
 # =============================================================================
-# 2. KITTY — ~/.config/kitty/kitty.conf
+# 2. ALL ROFI colors.rasi
+# =============================================================================
+apply_rofi_colors() {
+    local count=0
+    while IFS= read -r -d '' cfg; do
+        backup "$cfg"
+        cat > "$cfg" << EOF
+/* Matrix Green Theme */
+* {
+    background:                  ${BG};
+    background-alt:              ${GREY};
+    foreground:                  ${FG};
+    foreground-alt:              ${GREEN_DIM};
+    border-color:                ${GREEN_GLOW};
+    selected-normal-background:  ${GREEN_DARK};
+    selected-normal-foreground:  ${FG};
+    selected-urgent-background:  ${RED};
+    selected-urgent-foreground:  ${BG};
+    selected-active-background:  ${GREEN_MID};
+    selected-active-foreground:  ${BG};
+    urgent-foreground:           ${RED};
+    active-foreground:           ${GREEN_GLOW};
+}
+EOF
+        (( count++ )) || true
+    done < <(find "$USER_HOME/.config/polybar" -name "colors.rasi" -print0)
+    ok "Rofi: updated $count colors.rasi files."
+}
+
+# =============================================================================
+# 3. KITTY — ~/.config/kitty/kitty.conf
 # =============================================================================
 apply_kitty() {
-    local cfg="$HOME/.config/kitty/kitty.conf"
+    local cfg="$USER_HOME/.config/kitty/kitty.conf"
     if [[ ! -f "$cfg" ]]; then
         warn "kitty.conf not found — skipping."
         return
     fi
 
     backup "$cfg"
+    local tmp; tmp=$(mktemp)
 
-    # Remove existing color lines then append the new palette
-    local tmp
-    tmp=$(mktemp)
-    grep -Ev '^\s*(background|foreground|cursor|selection_background|selection_foreground|color[0-9]+)\s' "$cfg" > "$tmp" || true
+    # Strip existing color definitions
+    grep -Ev '^\s*(background|foreground|cursor|selection_background|selection_foreground|color[0-9]+)\s' \
+        "$cfg" > "$tmp" || true
 
     cat >> "$tmp" << EOF
 
@@ -83,48 +113,33 @@ cursor                ${FG}
 selection_background  ${GREEN_DARK}
 selection_foreground  ${FG}
 
-# black
-color0   #000000
-color8   #1A2E1A
-
-# red (kept red for error visibility)
+color0   ${BLACK}
+color8   ${GREY}
 color1   #CC0000
-color9   #FF0000
-
-# green (matrix greens)
+color9   ${RED}
 color2   ${GREEN_MID}
 color10  ${FG}
-
-# yellow → bright green
 color3   ${GREEN_DIM}
 color11  ${GREEN_GLOW}
-
-# blue → dark green
 color4   ${GREEN_DARK}
 color12  ${GREEN_MID}
-
-# magenta → mid green
 color5   ${GREEN_MID}
 color13  ${GREEN_DIM}
-
-# cyan → neon green
 color6   ${GREEN_GLOW}
 color14  ${FG}
-
-# white → light green
 color7   ${GREEN_DIM}
 color15  ${FG}
 EOF
 
     mv "$tmp" "$cfg"
-    success "Kitty colors updated."
+    ok "Kitty colors updated."
 }
 
 # =============================================================================
-# 3. BSPWM — ~/.config/bspwm/bspwmrc (border colors)
+# 4. BSPWM border colors — ~/.config/bspwm/bspwmrc
 # =============================================================================
 apply_bspwm() {
-    local cfg="$HOME/.config/bspwm/bspwmrc"
+    local cfg="$USER_HOME/.config/bspwm/bspwmrc"
     if [[ ! -f "$cfg" ]]; then
         warn "bspwmrc not found — skipping."
         return
@@ -132,14 +147,14 @@ apply_bspwm() {
 
     backup "$cfg"
 
-    sed -i "s|bspc config normal_border_color.*|bspc config normal_border_color   \"${GREEN_DARK}\"|" "$cfg"
-    sed -i "s|bspc config active_border_color.*|bspc config active_border_color    \"${GREEN_MID}\"|"  "$cfg"
-    sed -i "s|bspc config focused_border_color.*|bspc config focused_border_color  \"${GREEN_GLOW}\"|" "$cfg"
-    sed -i "s|bspc config presel_feedback_color.*|bspc config presel_feedback_color \"${FG}\"|"        "$cfg"
+    sed -i \
+        -e "s|bspc config normal_border_color.*|bspc config normal_border_color   \"${GREEN_DARK}\"|"  \
+        -e "s|bspc config active_border_color.*|bspc config active_border_color   \"${GREEN_MID}\"|"   \
+        -e "s|bspc config focused_border_color.*|bspc config focused_border_color  \"${GREEN_GLOW}\"|" \
+        -e "s|bspc config presel_feedback_color.*|bspc config presel_feedback_color \"${FG}\"|"        \
+        "$cfg"
 
-    # If the lines don't exist yet, append them
-    if ! grep -q "normal_border_color" "$cfg"; then
-        cat >> "$cfg" << EOF
+    grep -q "normal_border_color" "$cfg" || cat >> "$cfg" << EOF
 
 # Matrix Green border colors
 bspc config normal_border_color   "${GREEN_DARK}"
@@ -147,65 +162,15 @@ bspc config active_border_color   "${GREEN_MID}"
 bspc config focused_border_color  "${GREEN_GLOW}"
 bspc config presel_feedback_color "${FG}"
 EOF
-    fi
 
-    success "BSPWM border colors updated."
+    ok "BSPWM border colors updated."
 }
 
 # =============================================================================
-# 4. ROFI — first .rasi file found under ~/.config/rofi
-# =============================================================================
-apply_rofi() {
-    local rasi
-    rasi=$(find "$HOME/.config/rofi" -name "*.rasi" -print -quit 2>/dev/null || true)
-
-    if [[ -z "$rasi" ]]; then
-        warn "No rofi .rasi config found — skipping."
-        return
-    fi
-
-    backup "$rasi"
-
-    # Inject/replace the color block at the top
-    local tmp
-    tmp=$(mktemp)
-
-    # Strip any existing * { } color block at the top
-    awk 'BEGIN{skip=0} /^\s*\*\s*\{/{skip=1} skip && /\}/{skip=0; next} !skip' "$rasi" > "$tmp"
-
-    # Prepend the new palette
-    cat > "$rasi" << EOF
-/* Matrix Green Theme */
-* {
-    bg:          ${BG};
-    bg-alt:      ${GREY};
-    fg:          ${FG};
-    fg-alt:      ${GREEN_DIM};
-    border:      ${GREEN_GLOW};
-    selected:    ${GREEN_DARK};
-
-    background-color:  @bg;
-    text-color:        @fg;
-}
-
-EOF
-    cat "$tmp" >> "$rasi"
-    rm "$tmp"
-
-    success "Rofi colors updated ($rasi)."
-}
-
-# =============================================================================
-# 5. POWERLEVEL10K — ~/.p10k.zsh  (segment colors → 256-color codes)
-#    Matrix palette nearest 256-color equivalents:
-#      bright green  → 46   (#00ff00)
-#      mid green     → 28   (#008700)
-#      dark green    → 22   (#005f00)
-#      neon green    → 118  (#87ff00)
-#      black bg      → 232  (#080808)
+# 5. POWERLEVEL10K — ~/.p10k.zsh
 # =============================================================================
 apply_p10k() {
-    local cfg="$HOME/.p10k.zsh"
+    local cfg="$USER_HOME/.p10k.zsh"
     if [[ ! -f "$cfg" ]]; then
         warn ".p10k.zsh not found — skipping."
         return
@@ -213,55 +178,57 @@ apply_p10k() {
 
     backup "$cfg"
 
-    # Replace common foreground color codes with matrix greens
-    # These cover the most visible prompt segments
     sed -i \
-        -e "s/POWERLEVEL9K_OS_ICON_FOREGROUND=.*/POWERLEVEL9K_OS_ICON_FOREGROUND=46/"         \
-        -e "s/POWERLEVEL9K_DIR_FOREGROUND=.*/POWERLEVEL9K_DIR_FOREGROUND=46/"                 \
-        -e "s/POWERLEVEL9K_DIR_BACKGROUND=.*/POWERLEVEL9K_DIR_BACKGROUND=22/"                 \
-        -e "s/POWERLEVEL9K_VCS_CLEAN_FOREGROUND=.*/POWERLEVEL9K_VCS_CLEAN_FOREGROUND=46/"     \
-        -e "s/POWERLEVEL9K_VCS_MODIFIED_FOREGROUND=.*/POWERLEVEL9K_VCS_MODIFIED_FOREGROUND=28/" \
-        -e "s/POWERLEVEL9K_VCS_BACKGROUND=.*/POWERLEVEL9K_VCS_BACKGROUND=22/"                 \
-        -e "s/POWERLEVEL9K_STATUS_OK_FOREGROUND=.*/POWERLEVEL9K_STATUS_OK_FOREGROUND=46/"     \
+        -e "s/POWERLEVEL9K_OS_ICON_FOREGROUND=.*/POWERLEVEL9K_OS_ICON_FOREGROUND=46/"               \
+        -e "s/POWERLEVEL9K_OS_ICON_BACKGROUND=.*/POWERLEVEL9K_OS_ICON_BACKGROUND=232/"              \
+        -e "s/POWERLEVEL9K_DIR_FOREGROUND=.*/POWERLEVEL9K_DIR_FOREGROUND=46/"                       \
+        -e "s/POWERLEVEL9K_DIR_BACKGROUND=.*/POWERLEVEL9K_DIR_BACKGROUND=22/"                       \
+        -e "s/POWERLEVEL9K_DIR_SHORTENED_FOREGROUND=.*/POWERLEVEL9K_DIR_SHORTENED_FOREGROUND=28/"   \
+        -e "s/POWERLEVEL9K_VCS_CLEAN_FOREGROUND=.*/POWERLEVEL9K_VCS_CLEAN_FOREGROUND=46/"           \
+        -e "s/POWERLEVEL9K_VCS_UNTRACKED_FOREGROUND=.*/POWERLEVEL9K_VCS_UNTRACKED_FOREGROUND=28/"   \
+        -e "s/POWERLEVEL9K_VCS_MODIFIED_FOREGROUND=.*/POWERLEVEL9K_VCS_MODIFIED_FOREGROUND=118/"    \
+        -e "s/POWERLEVEL9K_VCS_BACKGROUND=.*/POWERLEVEL9K_VCS_BACKGROUND=22/"                       \
+        -e "s/POWERLEVEL9K_STATUS_OK_FOREGROUND=.*/POWERLEVEL9K_STATUS_OK_FOREGROUND=46/"           \
+        -e "s/POWERLEVEL9K_STATUS_ERROR_FOREGROUND=.*/POWERLEVEL9K_STATUS_ERROR_FOREGROUND=9/"      \
         -e "s/POWERLEVEL9K_COMMAND_EXECUTION_TIME_FOREGROUND=.*/POWERLEVEL9K_COMMAND_EXECUTION_TIME_FOREGROUND=28/" \
+        -e "s/POWERLEVEL9K_COMMAND_EXECUTION_TIME_BACKGROUND=.*/POWERLEVEL9K_COMMAND_EXECUTION_TIME_BACKGROUND=232/" \
+        -e "s/POWERLEVEL9K_TIME_FOREGROUND=.*/POWERLEVEL9K_TIME_FOREGROUND=46/"                     \
+        -e "s/POWERLEVEL9K_TIME_BACKGROUND=.*/POWERLEVEL9K_TIME_BACKGROUND=22/"                     \
         "$cfg"
 
-    success "Powerlevel10k colors updated."
+    ok "Powerlevel10k colors updated."
 }
 
 # =============================================================================
-# 6. RELOAD everything
+# 6. RELOAD
 # =============================================================================
 reload_all() {
-    info "Reloading environments..."
+    info "Reloading..."
 
-    # Polybar — kill and relaunch via bspwm launch script if it exists
-    if command -v polybar &>/dev/null; then
-        pkill -q polybar || true
-        local launch="$HOME/.config/polybar/launch.sh"
-        if [[ -x "$launch" ]]; then
-            bash "$launch" &
-            success "Polybar restarted."
-        else
-            warn "No launch.sh found — start polybar manually or press Win+Alt+R."
-        fi
+    # Polybar — find and run launch script
+    local launch=""
+    for candidate in \
+        "$USER_HOME/.config/polybar/launch.sh" \
+        "$USER_HOME/.config/bspwm/scripts/polybar.sh"
+    do
+        [[ -x "$candidate" ]] && launch="$candidate" && break
+    done
+
+    if [[ -n "$launch" ]]; then
+        pkill -q polybar 2>/dev/null || true
+        sleep 0.4
+        bash "$launch" &
+        ok "Polybar relaunched via $launch."
+    else
+        pkill -q polybar 2>/dev/null || true
+        ok "Polybar killed — it will restart when bspwm reloads."
     fi
 
-    # BSPWM — reload config (non-fatal if not running inside bspwm)
+    # BSPWM reload
     if command -v bspc &>/dev/null; then
-        bspc wm -r 2>/dev/null && success "BSPWM reloaded." || warn "bspc reload failed (not in a bspwm session?)."
+        bspc wm -r 2>/dev/null && ok "BSPWM reloaded." \
+            || warn "bspc reload failed — press Win+Alt+R manually."
     fi
-
-    echo ""
-    echo -e "\e[92m╔══════════════════════════════════════════╗"
-    echo -e "║      Matrix theme applied. Welcome back.  ║"
-    echo -e "╚══════════════════════════════════════════╝\e[0m"
-    echo ""
-    echo -e "  \e[32mKitty:\e[0m  Restart kitty or open a new window."
-    echo -e "  \e[32mRofi:\e[0m   Press Win+D to see the new colours."
-    echo -e "  \e[32mp10k:\e[0m   Run \e[1msource ~/.p10k.zsh\e[0m in your shell."
-    echo -e "  \e[32mFull:\e[0m   Press \e[1mWin+Alt+R\e[0m to reload bspwm fully."
-    echo ""
 }
 
 # =============================================================================
@@ -269,20 +236,33 @@ reload_all() {
 # =============================================================================
 echo -e "\e[92m"
 cat << 'BANNER'
-  __  __      _        _      _____  _
- |  \/  |    | |      (_)    |_   _|| |
- | \  / | __ | |_ _ __ _ __  | |  | |__   ___ _ __ ___   ___
+  __  __       _        _      _____  _
+ |  \/  |     | |      (_)    |_   _|| |
+ | \  / | __ _| |_ _ __ _ __  | |  | |__   ___ _ __ ___   ___
  | |\/| |/ _` | __| '__| \ \/ / |  | '_ \ / _ \ '_ ` _ \ / _ \
  | |  | | (_| | |_| |  | |>  < _| |_| | | |  __/ | | | | |  __/
  |_|  |_|\__,_|\__|_|  |_/_/\_\_____|_| |_|\___|_| |_| |_|\___|
 
-            auto-bspwm  ·  Matrix Green Theme
+            auto-bspwm · Matrix Green · /home/deathtollz
 BANNER
 echo -e "\e[0m"
 
-apply_polybar
+apply_polybar_colors
+apply_rofi_colors
 apply_kitty
 apply_bspwm
-apply_rofi
 apply_p10k
 reload_all
+
+echo ""
+echo -e "\e[92m╔══════════════════════════════════════════════════╗"
+echo -e "║  All themes patched. Enter the Matrix.           ║"
+echo -e "╚══════════════════════════════════════════════════╝\e[0m"
+echo ""
+echo -e "  \e[32mPolybar/BSPWM:\e[0m  press \e[1mWin + Alt + R\e[0m to fully reload"
+echo -e "  \e[32mKitty:\e[0m          open a new window"
+echo -e "  \e[32mp10k:\e[0m           run \e[1msource ~/.p10k.zsh\e[0m"
+echo -e "  \e[32mRofi:\e[0m           press \e[1mWin + D\e[0m"
+echo ""
+echo -e "  Backups: \e[2m<original_file>.bak.<unix_timestamp>\e[0m"
+echo ""
