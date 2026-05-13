@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
-# MATRIX POLYBAR FULL REBUILD (UPDATED)
-# Kali logo + power icon + IP display + cleaned modules
+# MATRIX POLYBAR FULL REBUILD
+# Clean Matrix-style Polybar with bold green MENU + POWER
 # =============================================================================
 
 set -euo pipefail
@@ -71,8 +71,8 @@ if command -v pacman >/dev/null 2>&1; then
         network-manager-applet \
         pulseaudio \
         pavucontrol \
-        ttf-jetbrains-mono-nerd \
         noto-fonts \
+        ttf-jetbrains-mono-nerd \
         kitty \
         thunar \
         firefox \
@@ -80,7 +80,7 @@ if command -v pacman >/dev/null 2>&1; then
 fi
 
 # =============================================================================
-# AUTO-DETECT NETWORK INTERFACE
+# AUTO DETECT NETWORK INTERFACE
 # =============================================================================
 
 NET_INTERFACE=$(ip route | awk '/default/ {print $5}' | head -n1)
@@ -89,7 +89,7 @@ if [[ -z "${NET_INTERFACE:-}" ]]; then
     NET_INTERFACE="wlan0"
 fi
 
-echo "[*] Detected network interface: $NET_INTERFACE"
+echo "[*] Detected interface: $NET_INTERFACE"
 
 # =============================================================================
 # ROFI THEME
@@ -106,7 +106,7 @@ cat > "$THEME_DIR/matrix.rasi" << 'EOF'
 
     border-color: #00FF41;
 
-    font: "JetBrainsMono Nerd Font 11";
+    font: "JetBrainsMono Nerd Font Bold 11";
 }
 
 window {
@@ -235,9 +235,8 @@ padding = 0
 module-margin-left = 0
 module-margin-right = 0
 
-font-0 = "Noto Sans:size=9;3"
-font-1 = "JetBrainsMono Nerd Font:size=12;3"
-font-2 = "JetBrainsMono Nerd Font:size=16;4"
+font-0 = "JetBrainsMono Nerd Font Bold:size=11;3"
+font-1 = "Noto Sans Bold:size=10;3"
 
 modules-left = menu sep2 term web files
 modules-center = date
@@ -260,13 +259,11 @@ tray-padding = 2
 [module/menu]
 type = custom/text
 
-content = ""
+content = " MENU "
 
-content-font = 2
-
-content-background = \${color.green}
-content-foreground = \${color.black}
-content-padding = 3
+content-background = \${color.bg-alt}
+content-foreground = \${color.green}
+content-padding = 2
 
 click-left = ~/.config/rofi/scripts/launcher.sh
 
@@ -277,13 +274,11 @@ click-left = ~/.config/rofi/scripts/launcher.sh
 [module/sysmenu]
 type = custom/text
 
-content = "⏻"
-
-content-font = 2
+content = " POWER "
 
 content-background = \${color.bg-alt}
 content-foreground = \${color.green}
-content-padding = 3
+content-padding = 2
 
 click-left = ~/.config/rofi/scripts/powermenu.sh
 
@@ -485,13 +480,13 @@ echo "=================================================="
 echo ""
 echo " Features:"
 echo ""
-echo "  • Kali Linux launcher icon"
-echo "  • Power icon menu"
+echo "  • Bold green MENU"
+echo "  • Bold green POWER"
 echo "  • Green FILES module"
 echo "  • IP address display"
 echo "  • Online/offline status"
 echo "  • Matrix green theme"
-echo "  • Clean rebuilt Polybar"
+echo "  • Fully rebuilt Polybar"
 echo ""
 echo " Polybar log:"
 echo " ~/.cache/polybar.log"
