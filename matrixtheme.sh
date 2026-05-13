@@ -1,23 +1,35 @@
 #!/usr/bin/env bash
 # =============================================================================
-#  matrix-theme.sh — Matrix green theme for auto-bspwm (deathtollz)
-#  Targets ALL polybar themes + rofi colors, kitty, bspwm borders, p10k
+#  matrix-theme.sh — Classic phosphor CRT green theme (matches screenshot)
+#  /home/deathtollz — auto-bspwm
 # =============================================================================
 
 set -euo pipefail
 
 USER_HOME="/home/deathtollz"
 
-# ── Matrix palette ────────────────────────────────────────────────────────────
-BG="#0D0D0D"
-BG_ALT="#0A1A0A"
-FG="#00FF41"
-GREEN_DIM="#00CC33"
-GREEN_MID="#008F11"
-GREEN_DARK="#003B00"
-GREEN_GLOW="#39FF14"
+# ── Palette (matched from screenshot) ─────────────────────────────────────────
+#
+#   BG          pure black — the dark terminal background
+#   BG_ALT      very slightly green-tinted black — for bar/panel backgrounds
+#   FG          classic phosphor green — primary text
+#   GREEN_BRIGHT pure bright green — highlights, focused elements, chart bars
+#   GREEN_DIM   muted green — secondary/dimmer text (like the ls output)
+#   GREEN_MID   mid green — module separators, inactive elements
+#   GREEN_DARK  dark green — selection backgrounds, borders
+#   BLACK       pure black
+#   GREY        very dark greenish — subtle backgrounds
+#   RED         kept red for alerts only
+#
+BG="#080808"
+BG_ALT="#0A0F0A"
+FG="#00CC00"
+GREEN_BRIGHT="#00FF00"
+GREEN_DIM="#009900"
+GREEN_MID="#007700"
+GREEN_DARK="#003300"
 BLACK="#000000"
-GREY="#1A2E1A"
+GREY="#0D150D"
 RED="#FF0000"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -35,20 +47,21 @@ apply_polybar_colors() {
         backup "$cfg"
         cat > "$cfg" << EOF
 [color]
-background     = ${BG}
+; Classic phosphor green theme
+background     = ${BG_ALT}
 background-alt = ${GREY}
 foreground     = ${FG}
 foreground-alt = ${GREEN_DIM}
-primary        = ${FG}
+primary        = ${GREEN_BRIGHT}
 secondary      = ${GREEN_MID}
 alert          = ${RED}
-green          = ${FG}
-yellow         = ${GREEN_GLOW}
+green          = ${GREEN_BRIGHT}
+yellow         = ${FG}
 orange         = ${GREEN_DIM}
 red            = ${RED}
 pink           = ${GREEN_MID}
 blue           = ${GREEN_MID}
-cyan           = ${GREEN_GLOW}
+cyan           = ${GREEN_BRIGHT}
 white          = ${FG}
 black          = ${BLACK}
 EOF
@@ -65,21 +78,21 @@ apply_rofi_colors() {
     while IFS= read -r -d '' cfg; do
         backup "$cfg"
         cat > "$cfg" << EOF
-/* Matrix Green Theme */
+/* Classic phosphor green theme */
 * {
     background:                  ${BG};
     background-alt:              ${GREY};
     foreground:                  ${FG};
     foreground-alt:              ${GREEN_DIM};
-    border-color:                ${GREEN_GLOW};
+    border-color:                ${GREEN_BRIGHT};
     selected-normal-background:  ${GREEN_DARK};
-    selected-normal-foreground:  ${FG};
+    selected-normal-foreground:  ${GREEN_BRIGHT};
     selected-urgent-background:  ${RED};
     selected-urgent-foreground:  ${BG};
     selected-active-background:  ${GREEN_MID};
-    selected-active-foreground:  ${BG};
+    selected-active-foreground:  ${GREEN_BRIGHT};
     urgent-foreground:           ${RED};
-    active-foreground:           ${GREEN_GLOW};
+    active-foreground:           ${GREEN_BRIGHT};
 }
 EOF
         (( count++ )) || true
@@ -89,6 +102,7 @@ EOF
 
 # =============================================================================
 # 3. KITTY — ~/.config/kitty/kitty.conf
+#    Matched to screenshot: black bg, classic #00CC00 text, pure #00FF00 bright
 # =============================================================================
 apply_kitty() {
     local cfg="$USER_HOME/.config/kitty/kitty.conf"
@@ -101,32 +115,48 @@ apply_kitty() {
     local tmp; tmp=$(mktemp)
 
     # Strip existing color definitions
-    grep -Ev '^\s*(background|foreground|cursor|selection_background|selection_foreground|color[0-9]+)\s' \
+    grep -Ev '^\s*(background|foreground|cursor|cursor_text_color|selection_background|selection_foreground|color[0-9]+)\s' \
         "$cfg" > "$tmp" || true
 
     cat >> "$tmp" << EOF
 
-# ── Matrix Green Theme ────────────────────────────────────────────────────────
+# ── Classic phosphor CRT green ─────────────────────────────────────────────
 background            ${BG}
 foreground            ${FG}
-cursor                ${FG}
+cursor                ${GREEN_BRIGHT}
+cursor_text_color     ${BG}
 selection_background  ${GREEN_DARK}
-selection_foreground  ${FG}
+selection_foreground  ${GREEN_BRIGHT}
 
+# black / dark grey
 color0   ${BLACK}
 color8   ${GREY}
-color1   #CC0000
+
+# red (errors only)
+color1   #880000
 color9   ${RED}
+
+# green — the main event
 color2   ${GREEN_MID}
-color10  ${FG}
+color10  ${GREEN_BRIGHT}
+
+# yellow → phosphor green variants
 color3   ${GREEN_DIM}
-color11  ${GREEN_GLOW}
+color11  ${FG}
+
+# blue → dark green
 color4   ${GREEN_DARK}
 color12  ${GREEN_MID}
+
+# magenta → mid green
 color5   ${GREEN_MID}
 color13  ${GREEN_DIM}
-color6   ${GREEN_GLOW}
-color14  ${FG}
+
+# cyan → bright green
+color6   ${FG}
+color14  ${GREEN_BRIGHT}
+
+# white → phosphor green
 color7   ${GREEN_DIM}
 color15  ${FG}
 EOF
@@ -148,18 +178,18 @@ apply_bspwm() {
     backup "$cfg"
 
     sed -i \
-        -e "s|bspc config normal_border_color.*|bspc config normal_border_color   \"${GREEN_DARK}\"|"  \
-        -e "s|bspc config active_border_color.*|bspc config active_border_color   \"${GREEN_MID}\"|"   \
-        -e "s|bspc config focused_border_color.*|bspc config focused_border_color  \"${GREEN_GLOW}\"|" \
-        -e "s|bspc config presel_feedback_color.*|bspc config presel_feedback_color \"${FG}\"|"        \
+        -e "s|bspc config normal_border_color.*|bspc config normal_border_color   \"${GREEN_DARK}\"|"    \
+        -e "s|bspc config active_border_color.*|bspc config active_border_color   \"${GREEN_MID}\"|"     \
+        -e "s|bspc config focused_border_color.*|bspc config focused_border_color  \"${GREEN_BRIGHT}\"|" \
+        -e "s|bspc config presel_feedback_color.*|bspc config presel_feedback_color \"${FG}\"|"          \
         "$cfg"
 
     grep -q "normal_border_color" "$cfg" || cat >> "$cfg" << EOF
 
-# Matrix Green border colors
+# Classic phosphor green border colors
 bspc config normal_border_color   "${GREEN_DARK}"
 bspc config active_border_color   "${GREEN_MID}"
-bspc config focused_border_color  "${GREEN_GLOW}"
+bspc config focused_border_color  "${GREEN_BRIGHT}"
 bspc config presel_feedback_color "${FG}"
 EOF
 
@@ -168,6 +198,14 @@ EOF
 
 # =============================================================================
 # 5. POWERLEVEL10K — ~/.p10k.zsh
+#    256-color map:
+#      28  = #008700  ≈ GREEN_MID
+#      34  = #00af00  ≈ GREEN_DIM/FG
+#      40  = #00d700  ≈ FG (#00CC00)
+#      46  = #00ff00  = GREEN_BRIGHT
+#      232 = #080808  = BG
+#      233 = #121212  ≈ BG_ALT
+#      22  = #005f00  ≈ GREEN_DARK
 # =============================================================================
 apply_p10k() {
     local cfg="$USER_HOME/.p10k.zsh"
@@ -181,18 +219,18 @@ apply_p10k() {
     sed -i \
         -e "s/POWERLEVEL9K_OS_ICON_FOREGROUND=.*/POWERLEVEL9K_OS_ICON_FOREGROUND=46/"               \
         -e "s/POWERLEVEL9K_OS_ICON_BACKGROUND=.*/POWERLEVEL9K_OS_ICON_BACKGROUND=232/"              \
-        -e "s/POWERLEVEL9K_DIR_FOREGROUND=.*/POWERLEVEL9K_DIR_FOREGROUND=46/"                       \
+        -e "s/POWERLEVEL9K_DIR_FOREGROUND=.*/POWERLEVEL9K_DIR_FOREGROUND=40/"                       \
         -e "s/POWERLEVEL9K_DIR_BACKGROUND=.*/POWERLEVEL9K_DIR_BACKGROUND=22/"                       \
         -e "s/POWERLEVEL9K_DIR_SHORTENED_FOREGROUND=.*/POWERLEVEL9K_DIR_SHORTENED_FOREGROUND=28/"   \
         -e "s/POWERLEVEL9K_VCS_CLEAN_FOREGROUND=.*/POWERLEVEL9K_VCS_CLEAN_FOREGROUND=46/"           \
-        -e "s/POWERLEVEL9K_VCS_UNTRACKED_FOREGROUND=.*/POWERLEVEL9K_VCS_UNTRACKED_FOREGROUND=28/"   \
-        -e "s/POWERLEVEL9K_VCS_MODIFIED_FOREGROUND=.*/POWERLEVEL9K_VCS_MODIFIED_FOREGROUND=118/"    \
+        -e "s/POWERLEVEL9K_VCS_UNTRACKED_FOREGROUND=.*/POWERLEVEL9K_VCS_UNTRACKED_FOREGROUND=34/"   \
+        -e "s/POWERLEVEL9K_VCS_MODIFIED_FOREGROUND=.*/POWERLEVEL9K_VCS_MODIFIED_FOREGROUND=40/"     \
         -e "s/POWERLEVEL9K_VCS_BACKGROUND=.*/POWERLEVEL9K_VCS_BACKGROUND=22/"                       \
         -e "s/POWERLEVEL9K_STATUS_OK_FOREGROUND=.*/POWERLEVEL9K_STATUS_OK_FOREGROUND=46/"           \
         -e "s/POWERLEVEL9K_STATUS_ERROR_FOREGROUND=.*/POWERLEVEL9K_STATUS_ERROR_FOREGROUND=9/"      \
-        -e "s/POWERLEVEL9K_COMMAND_EXECUTION_TIME_FOREGROUND=.*/POWERLEVEL9K_COMMAND_EXECUTION_TIME_FOREGROUND=28/" \
+        -e "s/POWERLEVEL9K_COMMAND_EXECUTION_TIME_FOREGROUND=.*/POWERLEVEL9K_COMMAND_EXECUTION_TIME_FOREGROUND=34/" \
         -e "s/POWERLEVEL9K_COMMAND_EXECUTION_TIME_BACKGROUND=.*/POWERLEVEL9K_COMMAND_EXECUTION_TIME_BACKGROUND=232/" \
-        -e "s/POWERLEVEL9K_TIME_FOREGROUND=.*/POWERLEVEL9K_TIME_FOREGROUND=46/"                     \
+        -e "s/POWERLEVEL9K_TIME_FOREGROUND=.*/POWERLEVEL9K_TIME_FOREGROUND=40/"                     \
         -e "s/POWERLEVEL9K_TIME_BACKGROUND=.*/POWERLEVEL9K_TIME_BACKGROUND=22/"                     \
         "$cfg"
 
@@ -205,7 +243,6 @@ apply_p10k() {
 reload_all() {
     info "Reloading..."
 
-    # Polybar — find and run launch script
     local launch=""
     for candidate in \
         "$USER_HOME/.config/polybar/launch.sh" \
@@ -214,17 +251,14 @@ reload_all() {
         [[ -x "$candidate" ]] && launch="$candidate" && break
     done
 
+    pkill -q polybar 2>/dev/null || true
+    sleep 0.4
+
     if [[ -n "$launch" ]]; then
-        pkill -q polybar 2>/dev/null || true
-        sleep 0.4
         bash "$launch" &
         ok "Polybar relaunched via $launch."
-    else
-        pkill -q polybar 2>/dev/null || true
-        ok "Polybar killed — it will restart when bspwm reloads."
     fi
 
-    # BSPWM reload
     if command -v bspc &>/dev/null; then
         bspc wm -r 2>/dev/null && ok "BSPWM reloaded." \
             || warn "bspc reload failed — press Win+Alt+R manually."
@@ -234,16 +268,17 @@ reload_all() {
 # =============================================================================
 # MAIN
 # =============================================================================
-echo -e "\e[92m"
+echo -e "\e[32m"
 cat << 'BANNER'
-  __  __       _        _      _____  _
- |  \/  |     | |      (_)    |_   _|| |
- | \  / | __ _| |_ _ __ _ __  | |  | |__   ___ _ __ ___   ___
- | |\/| |/ _` | __| '__| \ \/ / |  | '_ \ / _ \ '_ ` _ \ / _ \
- | |  | | (_| | |_| |  | |>  < _| |_| | | |  __/ | | | | |  __/
- |_|  |_|\__,_|\__|_|  |_/_/\_\_____|_| |_|\___|_| |_| |_|\___|
 
-            auto-bspwm · Matrix Green · /home/deathtollz
+  ██████╗ ██╗  ██╗ ██████╗ ███████╗██████╗
+ ██╔════╝ ██║  ██║██╔═══██╗██╔════╝██╔══██╗
+ ██║  ███╗███████║██║   ██║███████╗██████╔╝
+ ██║   ██║██╔══██║██║   ██║╚════██║██╔══██╗
+ ╚██████╔╝██║  ██║╚██████╔╝███████║██║  ██║
+  ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝
+
+        Phosphor CRT Green · /home/deathtollz
 BANNER
 echo -e "\e[0m"
 
@@ -255,14 +290,14 @@ apply_p10k
 reload_all
 
 echo ""
-echo -e "\e[92m╔══════════════════════════════════════════════════╗"
-echo -e "║  All themes patched. Enter the Matrix.           ║"
+echo -e "\e[32m╔══════════════════════════════════════════════════╗"
+echo -e "║  Wake up, Neo. The Matrix has you.               ║"
 echo -e "╚══════════════════════════════════════════════════╝\e[0m"
 echo ""
-echo -e "  \e[32mPolybar/BSPWM:\e[0m  press \e[1mWin + Alt + R\e[0m to fully reload"
-echo -e "  \e[32mKitty:\e[0m          open a new window"
-echo -e "  \e[32mp10k:\e[0m           run \e[1msource ~/.p10k.zsh\e[0m"
-echo -e "  \e[32mRofi:\e[0m           press \e[1mWin + D\e[0m"
+echo -e "  \e[32mBSPWM:\e[0m   \e[1mWin + Alt + R\e[0m to fully reload"
+echo -e "  \e[32mKitty:\e[0m   open a new terminal window"
+echo -e "  \e[32mp10k:\e[0m    \e[1msource ~/.p10k.zsh\e[0m"
+echo -e "  \e[32mRofi:\e[0m    \e[1mWin + D\e[0m"
 echo ""
-echo -e "  Backups: \e[2m<original_file>.bak.<unix_timestamp>\e[0m"
+echo -e "  Backups: \e[2m<file>.bak.<unix_timestamp>\e[0m"
 echo ""
