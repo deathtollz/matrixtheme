@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # =============================================================================
-# MATRIX POLYBAR REBUILD (FULL CLEAN INSTALL)
-# Completely removes old Polybar configs and builds a fresh Matrix setup
+# COMPLETE MATRIX POLYBAR PURGE + REBUILD
+# FULLY removes ALL existing Polybar configs/cache/processes
+# then installs a fresh Adi1090x-style Matrix Polybar
 # =============================================================================
 
 set -euo pipefail
@@ -9,95 +10,80 @@ set -euo pipefail
 USER_HOME="/home/deathtollz"
 
 POLYBAR_DIR="$USER_HOME/.config/polybar"
+CACHE_DIR="$USER_HOME/.cache/polybar"
+LOCAL_DIR="$USER_HOME/.local/share/polybar"
+
 ROFI_DIR="$USER_HOME/.config/rofi"
 SCRIPT_DIR="$ROFI_DIR/scripts"
 
 echo "=================================================="
-echo " MATRIX POLYBAR FULL REBUILD"
+echo " COMPLETE MATRIX POLYBAR REBUILD"
 echo "=================================================="
 
 sleep 2
 
 # =============================================================================
-# BACKUP OLD CONFIG
+# STOP ALL POLYBAR INSTANCES
 # =============================================================================
 
-if [[ -d "$POLYBAR_DIR" ]]; then
-    echo "[*] Backing up old Polybar..."
-    mv "$POLYBAR_DIR" "$POLYBAR_DIR.bak.$(date +%s)"
-fi
+echo "[*] Killing Polybar..."
+
+pkill -9 polybar 2>/dev/null || true
+
+sleep 1
 
 # =============================================================================
-# CLEAN INSTALL
+# REMOVE OLD CONFIGS
 # =============================================================================
+
+echo "[*] Removing old Polybar files..."
+
+rm -rf "$POLYBAR_DIR"
+rm -rf "$CACHE_DIR"
+rm -rf "$LOCAL_DIR"
+
+# Remove possible stray configs
+rm -rf "$USER_HOME/.config/bspwm/polybar"
+rm -rf "$USER_HOME/.config/polybar.old"
+rm -rf "$USER_HOME/.config/polybar.bak"
+
+# Remove launch scripts that may restart old bars
+find "$USER_HOME/.config" -type f \( \
+-name "launch.sh" -o \
+-name "polybar.sh" \
+\) -exec rm -f {} \; 2>/dev/null || true
+
+# =============================================================================
+# CREATE CLEAN STRUCTURE
+# =============================================================================
+
+echo "[*] Creating fresh config..."
 
 mkdir -p "$POLYBAR_DIR"
 mkdir -p "$SCRIPT_DIR"
 
 # =============================================================================
-# COLORS
+# INSTALL REQUIRED PACKAGES
 # =============================================================================
 
-cat > "$POLYBAR_DIR/colors.ini" << 'EOF'
-[colors]
+echo "[*] Installing required packages..."
 
-background = #CC050805
-background-alt = #111111
-
-foreground = #88FF88
-foreground-alt = #44CC44
-
-primary = #00FF41
-secondary = #44CC44
-alert = #AAFF44
-
-white = #E8FFE8
-black = #000000
-EOF
-
-# =============================================================================
-# POWERMENU SCRIPT
-# =============================================================================
-
-cat > "$SCRIPT_DIR/powermenu.sh" << 'EOF'
-#!/usr/bin/env bash
-
-chosen=$(printf " Lock\n Sleep\n Logout\n Restart\n Shutdown" | \
-rofi \
--no-config \
--theme ~/.config/rofi/themes/matrix.rasi \
--dmenu \
--i \
--p "󰣇 Power")
-
-case "$chosen" in
-
-    *Lock)
-        betterlockscreen -l 2>/dev/null || i3lock
-        ;;
-
-    *Sleep)
-        systemctl suspend
-        ;;
-
-    *Logout)
-        bspc quit
-        ;;
-
-    *Restart)
-        systemctl reboot
-        ;;
-
-    *Shutdown)
-        systemctl poweroff
-        ;;
-esac
-EOF
-
-chmod +x "$SCRIPT_DIR/powermenu.sh"
+if command -v pacman >/dev/null 2>&1; then
+    sudo pacman -S --needed --noconfirm \
+        polybar \
+        rofi \
+        networkmanager \
+        network-manager-applet \
+        pulseaudio \
+        pavucontrol \
+        ttf-jetbrains-mono-nerd \
+        noto-fonts \
+        kitty \
+        thunar
+fi
 
 # =============================================================================
-# LAUNCHER SCRIPT
+# ROFI LAUNCHER
 # =============================================================================
 
 cat > "$SCRIPT_DIR/launcher.sh" << 'EOF'
@@ -112,85 +98,205 @@ EOF
 chmod +x "$SCRIPT_DIR/launcher.sh"
 
 # =============================================================================
-# POLYBAR CONFIG
+# ROFI POWERMENU
+# =============================================================================
+
+cat > "$SCRIPT_DIR/powermenu.sh" << 'EOF'
+#!/usr/bin/env bash
+
+chosen=$(printf "LOCK\nSLEEP\nLOGOUT\nRESTART\nSHUTDOWN" | \
+rofi \
+-no-config \
+-theme ~/.config/rofi/themes/matrix.rasi \
+-dmenu \
+-i \
+-p "POWER")
+
+case "$chosen" in
+
+    LOCK)
+        betterlockscreen -l 2>/dev/null || i3lock
+        ;;
+
+    SLEEP)
+        systemctl suspend
+        ;;
+
+    LOGOUT)
+        bspc quit
+        ;;
+
+    RESTART)
+        systemctl reboot
+        ;;
+
+    SHUTDOWN)
+        systemctl poweroff
+        ;;
+esac
+EOF
+
+chmod +x "$SCRIPT_DIR/powermenu.sh"
+
+# =============================================================================
+# MAIN CONFIG
 # =============================================================================
 
 cat > "$POLYBAR_DIR/config.ini" << 'EOF'
-include-file = ~/.config/polybar/colors.ini
+[global/wm]
+margin-top = 0
+margin-bottom = 0
+
+; =============================================================================
+; COLORS
+; =============================================================================
+
+[color]
+
+bg = #050805
+bg-alt = #101510
+
+fg = #88FF88
+fg-alt = #44CC44
+
+green = #00FF41
+green-soft = #44CC44
+green-dark = #2FAF2F
+
+white = #E8FFE8
+black = #000000
+
+alert = #AAFF44
+
+; =============================================================================
+; BAR
+; =============================================================================
 
 [bar/main]
 
 width = 100%
-height = 34
+height = 30
 
-radius = 0
+offset-x = 0
+offset-y = 0
 
-fixed-center = true
+background = ${color.bg}
+foreground = ${color.fg}
 
-background = ${colors.background}
-foreground = ${colors.foreground}
+radius-top = 0
+radius-bottom = 0
 
-line-size = 0
-border-size = 0
+padding = 0
 
-padding-left = 2
-padding-right = 2
+module-margin-left = 0
+module-margin-right = 0
 
-module-margin = 1
+font-0 = "Noto Sans:size=9;3"
+font-1 = "JetBrainsMono Nerd Font:size=12;3"
+font-2 = "JetBrainsMono Nerd Font:size=16;4"
 
-font-0 = "JetBrainsMono Nerd Font:size=11;3"
-font-1 = "JetBrainsMono Nerd Font:size=16;4"
-
-modules-left = launcher bspwm
+modules-left = menu sep2 term web files settings
 modules-center = date
-modules-right = cpu memory pulseaudio network powermenu
+modules-right = sep cpu memory alsa battery network sep sysmenu
 
-cursor-click = pointer
-cursor-scroll = ns-resize
-
-enable-ipc = true
+separator =
 
 wm-restack = bspwm
+enable-ipc = true
+
+cursor-click = pointer
+
+tray-position = none
 
 ; =============================================================================
-; LAUNCHER
+; MENU
 ; =============================================================================
 
-[module/launcher]
+[module/menu]
 type = custom/text
 
-content = "󰣇"
+content = "MENU"
 
-content-font = 2
-content-padding = 2
-
-content-foreground = ${colors.primary}
+content-background = ${color.green}
+content-foreground = ${color.black}
+content-padding = 3
 
 click-left = ~/.config/rofi/scripts/launcher.sh
 
 ; =============================================================================
-; BSPWM
+; POWER
 ; =============================================================================
 
-[module/bspwm]
-type = internal/bspwm
+[module/sysmenu]
+type = custom/text
 
-pin-workspaces = true
-inline-mode = false
+content = "POWER"
 
-format = <label-state>
+content-background = ${color.bg-alt}
+content-foreground = ${color.green}
+content-padding = 3
 
-label-focused = %name%
-label-focused-background = ${colors.primary}
-label-focused-foreground = ${colors.black}
-label-focused-padding = 2
+click-left = ~/.config/rofi/scripts/powermenu.sh
 
-label-occupied = %name%
-label-occupied-padding = 2
+; =============================================================================
+; SEPARATORS
+; =============================================================================
 
-label-empty = %name%
-label-empty-foreground = ${colors.foreground-alt}
-label-empty-padding = 2
+[module/sep]
+type = custom/text
+
+content = |
+content-foreground = ${color.green-dark}
+content-background = ${color.bg-alt}
+content-padding = 1
+
+[module/sep2]
+type = custom/text
+
+content = |
+content-foreground = ${color.bg}
+content-background = ${color.bg}
+content-padding = 1
+
+; =============================================================================
+; APPS
+; =============================================================================
+
+[module/term]
+type = custom/text
+
+content = TERM
+content-foreground = ${color.green}
+content-padding = 3
+
+click-left = kitty &
+
+[module/web]
+type = custom/text
+
+content = WEB
+content-foreground = ${color.green-soft}
+content-padding = 3
+
+click-left = firefox &
+
+[module/files]
+type = custom/text
+
+content = FILES
+content-foreground = ${color.white}
+content-padding = 3
+
+click-left = thunar &
+
+[module/settings]
+type = custom/text
+
+content = CFG
+content-foreground = ${color.alert}
+content-padding = 3
+
+click-left = xfce4-settings-manager &
 
 ; =============================================================================
 ; CPU
@@ -201,10 +307,10 @@ type = internal/cpu
 
 interval = 2
 
-format-prefix = "󰍛 "
-format-prefix-foreground = ${colors.primary}
+format-background = ${color.bg-alt}
+format-padding = 2
 
-label = %percentage%%
+label = CPU %percentage%%
 
 ; =============================================================================
 ; MEMORY
@@ -215,25 +321,51 @@ type = internal/memory
 
 interval = 2
 
-format-prefix = "󰑭 "
-format-prefix-foreground = ${colors.primary}
+format-background = ${color.bg-alt}
+format-padding = 2
 
-label = %percentage_used%%
+label = RAM %percentage_used%%
 
 ; =============================================================================
 ; AUDIO
 ; =============================================================================
 
-[module/pulseaudio]
+[module/alsa]
 type = internal/pulseaudio
 
-format-volume-prefix = "󰕾 "
-format-volume-prefix-foreground = ${colors.primary}
+format-volume-background = ${color.bg-alt}
+format-volume-padding = 2
 
-label-volume = %percentage%%
+label-volume = VOL %percentage%%
 
-label-muted = muted
-label-muted-foreground = ${colors.foreground-alt}
+label-muted = MUTED
+label-muted-foreground = ${color.fg-alt}
+
+; =============================================================================
+; BATTERY
+; =============================================================================
+
+[module/battery]
+type = internal/battery
+
+battery = BAT0
+adapter = AC
+
+poll-interval = 2
+full-at = 99
+
+format-charging-background = ${color.bg-alt}
+format-charging-padding = 2
+
+format-discharging-background = ${color.bg-alt}
+format-discharging-padding = 2
+
+format-full-background = ${color.bg-alt}
+format-full-padding = 2
+
+label-charging = CHG %percentage%%
+label-discharging = BAT %percentage%%
+label-full = FULL
 
 ; =============================================================================
 ; NETWORK
@@ -244,15 +376,16 @@ type = internal/network
 
 interface-type = wireless
 
-interval = 3
+interval = 1
 
-format-connected-prefix = "󰖩 "
-format-connected-prefix-foreground = ${colors.primary}
+format-connected-background = ${color.bg-alt}
+format-connected-padding = 2
 
-label-connected = %essid%
+format-disconnected-background = ${color.bg-alt}
+format-disconnected-padding = 2
 
-label-disconnected = offline
-label-disconnected-foreground = ${colors.foreground-alt}
+label-connected = ONLINE
+label-disconnected = OFFLINE
 
 ; =============================================================================
 ; DATE
@@ -263,28 +396,12 @@ type = internal/date
 
 interval = 1
 
-date = %Y-%m-%d%
-time = %H:%M
+time = %I:%M %p
 
-label = 󰥔 %date%  %time%
+format-background = ${color.bg-alt}
+format-padding = 2
 
-label-foreground = ${colors.white}
-
-; =============================================================================
-; POWERMENU
-; =============================================================================
-
-[module/powermenu]
-type = custom/text
-
-content = "⏻"
-
-content-font = 2
-content-padding = 2
-
-content-foreground = ${colors.primary}
-
-click-left = ~/.config/rofi/scripts/powermenu.sh
+label = %time%
 EOF
 
 # =============================================================================
@@ -294,7 +411,7 @@ EOF
 cat > "$POLYBAR_DIR/launch.sh" << 'EOF'
 #!/usr/bin/env bash
 
-pkill polybar 2>/dev/null || true
+pkill -9 polybar 2>/dev/null || true
 
 sleep 1
 
@@ -304,40 +421,26 @@ EOF
 chmod +x "$POLYBAR_DIR/launch.sh"
 
 # =============================================================================
-# RESTART
+# START BAR
 # =============================================================================
 
-echo "[*] Restarting Polybar..."
-
-pkill polybar 2>/dev/null || true
-
-sleep 1
+echo "[*] Starting Matrix Polybar..."
 
 "$POLYBAR_DIR/launch.sh"
 
 echo ""
 echo "=================================================="
-echo " MATRIX POLYBAR INSTALLED"
+echo " MATRIX POLYBAR SUCCESSFULLY INSTALLED"
 echo "=================================================="
 echo ""
-echo "FEATURES:"
+echo "Everything old was removed:"
 echo ""
-echo " • Matrix green cyber theme"
-echo " • Rofi launcher"
-echo " • Matrix power menu"
-echo " • BSPWM workspaces"
-echo " • CPU"
-echo " • RAM"
-echo " • Audio"
-echo " • WiFi"
-echo " • Clock"
+echo " • old configs"
+echo " • old modules"
+echo " • old launchers"
+echo " • old powermenus"
+echo " • old cache"
+echo " • old broken themes"
 echo ""
-echo "KEYBINDS:"
-echo ""
-echo " SUPER + D            → Rofi"
-echo " SUPER + SHIFT + E    → Powermenu"
-echo ""
-echo "If Polybar does not appear:"
-echo ""
-echo "    ~/.config/polybar/launch.sh"
+echo "Fresh Matrix bar is now active."
 echo ""
