@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # =============================================================================
-# POLYBAR REBUILD — matches screenshot layout exactly
-# Matrix green theme • dot workspaces • pentesting "No target" module
+# POLYBAR REBUILD — Matrix green theme, Kali-compatible
+# Layout: [⠿ IP ⛨ status] [● dots] [⊙ target ♪ vol ⏱ time ⏻]
+# Fix: VPN_IP unbound variable moved to external script (no heredoc expansion)
 # =============================================================================
 set -euo pipefail
 
@@ -38,66 +39,95 @@ rm -rf "$CACHE_DIR"
 # =============================================================================
 echo "[*] Creating directories..."
 mkdir -p "$POLYBAR_DIR"
+mkdir -p "$CACHE_DIR"
 mkdir -p "$SCRIPT_DIR"
 mkdir -p "$THEME_DIR"
 
 # =============================================================================
 # INSTALL PACKAGES
+# Kali Linux = apt; Arch = pacman
 # =============================================================================
 echo "[*] Installing dependencies..."
 if command -v pacman >/dev/null 2>&1; then
     sudo pacman -S --needed --noconfirm \
-        polybar \
-        rofi \
-        networkmanager \
-        network-manager-applet \
-        pulseaudio \
-        pavucontrol \
-        noto-fonts \
-        ttf-jetbrains-mono-nerd \
-        ttf-font-awesome \
-        bspwm \
-        i3lock
+        polybar rofi networkmanager network-manager-applet \
+        pulseaudio pavucontrol noto-fonts ttf-jetbrains-mono-nerd \
+        ttf-font-awesome bspwm sxhkd i3lock
+
 elif command -v apt >/dev/null 2>&1; then
     sudo apt install -y \
-        polybar \
-        rofi \
-        network-manager \
-        pulseaudio \
-        pavucontrol \
-        fonts-noto \
-        bspwm
+        polybar rofi network-manager \
+        pulseaudio pulseaudio-utils pavucontrol \
+        fonts-noto fonts-noto-extra \
+        bspwm sxhkd i3lock curl
+
+    # JetBrainsMono Nerd Font (not in apt — install manually to ~/.local/share/fonts)
+    if ! fc-list 2>/dev/null | grep -qi "JetBrainsMono Nerd"; then
+        echo "[*] Installing JetBrainsMono Nerd Font..."
+        FONT_DIR="$USER_HOME/.local/share/fonts"
+        mkdir -p "$FONT_DIR"
+        FONT_URL="https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.tar.xz"
+        TMP_FONT="/tmp/JetBrainsMono.tar.xz"
+        if curl -fsSL "$FONT_URL" -o "$TMP_FONT" 2>/dev/null; then
+            tar -xf "$TMP_FONT" -C "$FONT_DIR" --wildcards "*.ttf" 2>/dev/null || true
+            fc-cache -fv "$FONT_DIR" >/dev/null 2>&1
+            rm -f "$TMP_FONT"
+            echo "[*] Nerd Font installed."
+        else
+            echo "[!] Could not download Nerd Font — icons may not render correctly."
+        fi
+    else
+        echo "[*] JetBrainsMono Nerd Font already installed."
+    fi
 fi
 
 # =============================================================================
 # AUTO DETECT NETWORK INTERFACE
 # =============================================================================
-NET_INTERFACE=$(ip route | awk '/default/ {print $5}' | head -n1)
+NET_INTERFACE=$(ip route 2>/dev/null | awk '/default/ {print $5}' | head -n1 || true)
 if [[ -z "${NET_INTERFACE:-}" ]]; then
-    NET_INTERFACE="wlan0"
+    NET_INTERFACE="eth0"
 fi
 echo "[*] Detected interface: $NET_INTERFACE"
 
 # =============================================================================
-# TARGET FILE — used by "No target" module (HTB/CTF style)
-# Write an IP to this file to show it: echo "10.10.11.1" > ~/.target
-# Clear it to show "No target": echo "" > ~/.target
+# TARGET FILE (HTB/CTF)
+# echo "10.10.11.1" > ~/.target   -> shows IP
+# echo ""           > ~/.target   -> shows "No target"
 # =============================================================================
 TARGET_FILE="$USER_HOME/.target"
-if [[ ! -f "$TARGET_FILE" ]]; then
-    touch "$TARGET_FILE"
+[[ -f "$TARGET_FILE" ]] || touch "$TARGET_FILE"
+
+# =============================================================================
+# EXTERNAL SCRIPTS
+# All use single-quoted heredocs ('EOF') so shell variables inside
+# are NOT expanded by this script — this was the root cause of the
+# "VPN_IP: unbound variable" crash when using set -euo pipefail.
+# =============================================================================
+
+# --- VPN / network status ---
+cat > "$POLYBAR_DIR/vpn.sh" << 'VPNEOF'
+#!/usr/bin/env bash
+if ip link show tun0 2>/dev/null | grep -q "state UP"; then
+    VPN_IP=$(ip -4 addr show tun0 2>/dev/null | awk '/inet / {print $2}' | cut -d/ -f1)
+    echo " ${VPN_IP:-VPN}"
+else
+    DEFAULT=$(ip -4 route show default 2>/dev/null | head -n1)
+    if [[ -n "$DEFAULT" ]]; then
+        echo " Disconnected"
+    else
+        echo " Disconnected"
+    fi
 fi
+VPNEOF
+chmod +x "$POLYBAR_DIR/vpn.sh"
 
-# =============================================================================
-# SCRIPTS
-# =============================================================================
-
-# --- Target module script ---
+# --- Target display ---
 cat > "$POLYBAR_DIR/target.sh" << 'TARGETEOF'
 #!/usr/bin/env bash
 TARGET_FILE="$HOME/.target"
 if [[ -f "$TARGET_FILE" ]]; then
-    TARGET=$(cat "$TARGET_FILE" | tr -d '[:space:]')
+    TARGET=$(tr -d '[:space:]' < "$TARGET_FILE")
     if [[ -n "$TARGET" ]]; then
         echo " $TARGET"
     else
@@ -109,26 +139,23 @@ fi
 TARGETEOF
 chmod +x "$POLYBAR_DIR/target.sh"
 
-# --- Set/clear target script (click to set) ---
-cat > "$POLYBAR_DIR/set_target.sh" << 'SETTARGETEOF'
+# --- Set / clear target on click ---
+cat > "$POLYBAR_DIR/set_target.sh" << 'SETEOF'
 #!/usr/bin/env bash
 TARGET_FILE="$HOME/.target"
-CURRENT=$(cat "$TARGET_FILE" 2>/dev/null | tr -d '[:space:]')
+CURRENT=$(tr -d '[:space:]' < "$TARGET_FILE" 2>/dev/null || true)
 if [[ -n "$CURRENT" ]]; then
-    # If a target is set, clear it on click
     echo "" > "$TARGET_FILE"
 else
-    # Otherwise prompt for new target via rofi
-    NEW=$(echo "" | rofi -dmenu -p "Set target IP:" -theme ~/.config/rofi/themes/pentest.rasi 2>/dev/null || true)
-    if [[ -n "$NEW" ]]; then
-        echo "$NEW" > "$TARGET_FILE"
-    fi
+    NEW=$(echo "" | rofi -dmenu -p " Set target IP:" \
+        -theme ~/.config/rofi/themes/pentest.rasi 2>/dev/null || true)
+    [[ -n "$NEW" ]] && echo "$NEW" > "$TARGET_FILE"
 fi
-SETTARGETEOF
+SETEOF
 chmod +x "$POLYBAR_DIR/set_target.sh"
 
-# --- Rofi theme (Matrix green) ---
-cat > "$THEME_DIR/pentest.rasi" << 'EOF'
+# --- Rofi Matrix theme ---
+cat > "$THEME_DIR/pentest.rasi" << 'ROFIEOF'
 * {
     bg:     #050805;
     bg-alt: #101510;
@@ -152,38 +179,28 @@ inputbar {
     border-color: @ac;
     background-color: @bg-alt;
 }
-listview {
-    margin: 4px;
-}
-element {
-    padding: 7px;
-}
+listview { margin: 4px; }
+element { padding: 7px; }
 element selected {
     background-color: @ac;
     text-color: @bg;
 }
-EOF
+ROFIEOF
 
-# --- Rofi launcher script ---
-cat > "$SCRIPT_DIR/launcher.sh" << 'EOF'
+# --- Rofi app launcher ---
+cat > "$SCRIPT_DIR/launcher.sh" << 'LAUNCHEOF'
 #!/usr/bin/env bash
-rofi \
-    -no-config \
-    -theme ~/.config/rofi/themes/pentest.rasi \
-    -show drun
-EOF
+rofi -no-config -theme ~/.config/rofi/themes/pentest.rasi -show drun
+LAUNCHEOF
 chmod +x "$SCRIPT_DIR/launcher.sh"
 
-# --- Power menu script ---
-cat > "$SCRIPT_DIR/powermenu.sh" << 'EOF'
+# --- Power menu ---
+cat > "$SCRIPT_DIR/powermenu.sh" << 'POWEREOF'
 #!/usr/bin/env bash
 chosen=$(printf "LOCK\nSLEEP\nLOGOUT\nRESTART\nSHUTDOWN" | \
-    rofi \
-    -no-config \
-    -theme ~/.config/rofi/themes/pentest.rasi \
-    -dmenu \
-    -i \
-    -p " POWER")
+    rofi -no-config \
+         -theme ~/.config/rofi/themes/pentest.rasi \
+         -dmenu -i -p " POWER")
 case "$chosen" in
     LOCK)     i3lock ;;
     SLEEP)    systemctl suspend ;;
@@ -191,58 +208,54 @@ case "$chosen" in
     RESTART)  systemctl reboot ;;
     SHUTDOWN) systemctl poweroff ;;
 esac
-EOF
+POWEREOF
 chmod +x "$SCRIPT_DIR/powermenu.sh"
 
 # =============================================================================
 # POLYBAR CONFIG
-# Layout (matches screenshot):
-#   LEFT:   [⠿ menu] [IP address] [shield Disconnected]
-#   CENTER: [● ○ ○ ○ ○ ○ ○ ○ ○ ○]  <- bspwm workspaces as dots
-#   RIGHT:  [⊙ No target] [♪ 40%] [⏱ 10:21 PM] [⏻]
+# This heredoc is unquoted (EOF not 'EOF') so $NET_INTERFACE expands correctly.
+# All polybar variables use \${...} to prevent the outer shell expanding them.
 # =============================================================================
 cat > "$POLYBAR_DIR/config.ini" << EOF
 ; =============================================================================
 ; COLORS — Matrix green on deep black
 ; =============================================================================
 [color]
-bg          = #050805
-bg-mod      = #101510
-bg-right    = #101510
-fg          = #88FF88
-fg-dim      = #44CC44
-fg-muted    = #2A6B2A
-green       = #00FF41
-green-soft  = #44CC44
-green-dark  = #2FAF2F
-white       = #E8FFE8
-alert       = #AAFF44
-sep-col     = #1A3A1A
+bg         = #050805
+bg-mod     = #101510
+bg-right   = #101510
+fg         = #88FF88
+fg-dim     = #44CC44
+fg-muted   = #2A6B2A
+green      = #00FF41
+green-soft = #44CC44
+green-dark = #2FAF2F
+white      = #E8FFE8
+alert      = #AAFF44
+sep-col    = #1A3A1A
 
 ; =============================================================================
 ; BAR
 ; =============================================================================
 [bar/main]
-monitor           =
-width             = 100%
-height            = 26
-offset-x          = 0
-offset-y          = 0
-radius            = 0
-fixed-center      = true
+monitor          =
+width            = 100%
+height           = 26
+offset-x         = 0
+offset-y         = 0
+radius           = 0
+fixed-center     = true
 
-background        = \${color.bg}
-foreground        = \${color.fg}
+background       = \${color.bg}
+foreground       = \${color.fg}
 
-line-size         = 0
-border-size       = 0
-
-padding-left      = 0
-padding-right     = 0
+line-size        = 0
+border-size      = 0
+padding-left     = 0
+padding-right    = 0
 module-margin-left  = 0
 module-margin-right = 0
 
-; Nerd Font for icons + regular glyphs
 font-0 = "JetBrainsMono Nerd Font:style=Bold:size=9;3"
 font-1 = "Noto Sans:style=Bold:size=9;3"
 font-2 = "JetBrainsMono Nerd Font:style=Regular:size=11;3"
@@ -251,42 +264,42 @@ modules-left   = menu space ip sep1 vpn-status
 modules-center = bspwm
 modules-right  = sep2 target sep3 volume sep4 date sep5 power
 
-separator      =
-enable-ipc     = true
-cursor-click   = pointer
-tray-position  = none
+separator     =
+enable-ipc    = true
+cursor-click  = pointer
+tray-position = none
 
 ; =============================================================================
-; LEFT — MENU (grid icon, clickable launcher)
+; LEFT — MENU (click to open rofi launcher)
 ; =============================================================================
 [module/menu]
-type                = custom/text
-content             = " ⠿ "
-content-foreground  = \${color.green}
-content-background  = \${color.bg-mod}
-click-left          = ~/.config/rofi/scripts/launcher.sh &
+type               = custom/text
+content            = " ⠿ "
+content-foreground = \${color.green}
+content-background = \${color.bg-mod}
+click-left         = ~/.config/rofi/scripts/launcher.sh &
 
 ; =============================================================================
 ; LEFT — SPACER
 ; =============================================================================
 [module/space]
-type                = custom/text
-content             = " "
-content-background  = \${color.bg}
+type               = custom/text
+content            = " "
+content-background = \${color.bg}
 
 ; =============================================================================
-; LEFT — IP ADDRESS
+; LEFT — IP ADDRESS (auto-detected interface: $NET_INTERFACE)
 ; =============================================================================
 [module/ip]
-type     = custom/script
-exec     = ip -4 addr show | awk '/inet / && !/127.0.0.1/ {print \$2}' | cut -d/ -f1 | head -n1
-interval = 10
-format-padding     = 1
-format-foreground  = \${color.white}
-format-background  = \${color.bg}
+type           = custom/script
+exec           = ip -4 addr show $NET_INTERFACE 2>/dev/null | awk '/inet / {print \$2}' | cut -d/ -f1 | head -n1
+interval       = 10
+format-padding    = 1
+format-foreground = \${color.white}
+format-background = \${color.bg}
 
 ; =============================================================================
-; LEFT — SEPARATOR 1
+; LEFT — SEPARATOR
 ; =============================================================================
 [module/sep1]
 type               = custom/text
@@ -294,65 +307,48 @@ content            = "  "
 content-background = \${color.bg}
 
 ; =============================================================================
-; LEFT — VPN / NETWORK STATUS  (shield icon + Disconnected / Connected)
-; Shows VPN if tun0 is up, else shows wifi/eth status
+; LEFT — VPN / NETWORK STATUS
+; External script avoids the "unbound variable" crash from the prior version.
 ; =============================================================================
 [module/vpn-status]
-type     = custom/script
-interval = 5
-exec     = bash -c '
-if ip link show tun0 2>/dev/null | grep -q "state UP"; then
-    VPN_IP=$(ip -4 addr show tun0 2>/dev/null | awk "/inet / {print \$2}" | cut -d/ -f1)
-    echo " Connected ${VPN_IP}"
-else
-    # Check if any non-loopback interface is UP with an IP
-    ONLINE=$(ip -4 route show default 2>/dev/null | head -n1)
-    if [[ -n "$ONLINE" ]]; then
-        echo " Disconnected"
-    else
-        echo " Disconnected"
-    fi
-fi'
-format-padding     = 1
-format-foreground  = \${color.fg-dim}
-format-background  = \${color.bg}
+type           = custom/script
+exec           = ~/.config/polybar/vpn.sh
+interval       = 5
+format-padding    = 1
+format-foreground = \${color.fg-dim}
+format-background = \${color.bg}
 
 ; =============================================================================
-; CENTER — BSPWM WORKSPACES (dot style matching screenshot)
-; ● = focused/active  ● = occupied  ○ = empty
+; CENTER — BSPWM WORKSPACES  ● focused  ● occupied  ○ empty
 ; =============================================================================
 [module/bspwm]
-type            = internal/bspwm
-pin-workspaces  = false
-enable-click    = true
-enable-scroll   = false
+type           = internal/bspwm
+pin-workspaces = false
+enable-click   = true
+enable-scroll  = false
 
-; Active/focused workspace — filled dot, bright
 label-focused             = ●
 label-focused-foreground  = \${color.green}
 label-focused-background  = \${color.bg}
 label-focused-padding     = 1
 
-; Occupied (has windows) — filled dot, dim
 label-occupied            = ●
 label-occupied-foreground = \${color.green-soft}
 label-occupied-background = \${color.bg}
 label-occupied-padding    = 1
 
-; Urgent workspace — alert colour
 label-urgent              = ●
 label-urgent-foreground   = \${color.alert}
 label-urgent-background   = \${color.bg}
 label-urgent-padding      = 1
 
-; Empty — hollow dot, muted
 label-empty               = ○
 label-empty-foreground    = \${color.fg-muted}
 label-empty-background    = \${color.bg}
 label-empty-padding       = 1
 
 ; =============================================================================
-; RIGHT SEPARATORS (thin coloured dividers)
+; RIGHT — SEPARATORS
 ; =============================================================================
 [module/sep2]
 type               = custom/text
@@ -378,54 +374,53 @@ content-foreground = \${color.sep-col}
 content-background = \${color.bg-right}
 
 ; =============================================================================
-; RIGHT — TARGET (HTB/CTF pentest module)
-; Shows "No target" until ~/.target contains an IP
-; Left-click: set target | Right-click: clear target
+; RIGHT — TARGET (HTB/CTF)
+; Left-click: prompt for IP  |  Right-click: clear
 ; =============================================================================
 [module/target]
-type               = custom/script
-exec               = ~/.config/polybar/target.sh
-interval           = 3
-format-background  = \${color.bg-right}
-format-foreground  = \${color.green}
-format-padding     = 1
-click-left         = ~/.config/polybar/set_target.sh &
-click-right        = echo "" > ~/.target
+type           = custom/script
+exec           = ~/.config/polybar/target.sh
+interval       = 3
+format-background = \${color.bg-right}
+format-foreground = \${color.green}
+format-padding    = 1
+click-left        = ~/.config/polybar/set_target.sh &
+click-right       = echo "" > ~/.target
 
 ; =============================================================================
 ; RIGHT — VOLUME (PulseAudio)
 ; =============================================================================
 [module/volume]
-type                       = internal/pulseaudio
-use-ui-max                 = false
-interval                   = 2
+type                     = internal/pulseaudio
+use-ui-max               = false
+interval                 = 2
 
-format-volume-background   = \${color.bg-right}
-format-volume-foreground   = \${color.fg}
-format-volume-padding      = 1
-label-volume               = " %percentage%%"
+format-volume-background = \${color.bg-right}
+format-volume-foreground = \${color.fg}
+format-volume-padding    = 1
+label-volume             = " %percentage%%"
 
-format-muted-background    = \${color.bg-right}
-format-muted-foreground    = \${color.fg-muted}
-format-muted-padding       = 1
-label-muted                = " muted"
+format-muted-background  = \${color.bg-right}
+format-muted-foreground  = \${color.fg-muted}
+format-muted-padding     = 1
+label-muted              = " muted"
 
-click-right                = pavucontrol &
+click-right              = pavucontrol &
 
 ; =============================================================================
-; RIGHT — DATE / TIME  (matching "10:21 PM" format)
+; RIGHT — TIME
 ; =============================================================================
 [module/date]
-type               = internal/date
-interval           = 1
-time               = " %I:%M %p"
-format-background  = \${color.bg-right}
-format-foreground  = \${color.fg}
-format-padding     = 1
-label              = %time%
+type              = internal/date
+interval          = 1
+time              = " %I:%M %p"
+format-background = \${color.bg-right}
+format-foreground = \${color.fg}
+format-padding    = 1
+label             = %time%
 
 ; =============================================================================
-; RIGHT — POWER BUTTON (circle icon, far right)
+; RIGHT — POWER BUTTON
 ; =============================================================================
 [module/power]
 type               = custom/text
@@ -438,7 +433,7 @@ EOF
 # =============================================================================
 # LAUNCH SCRIPT
 # =============================================================================
-cat > "$POLYBAR_DIR/launch.sh" << 'EOF'
+cat > "$POLYBAR_DIR/launch.sh" << 'LEOF'
 #!/usr/bin/env bash
 pkill -x polybar 2>/dev/null || true
 while pgrep -x polybar >/dev/null; do
@@ -448,7 +443,7 @@ mkdir -p ~/.cache/polybar
 polybar -c ~/.config/polybar/config.ini main \
     >~/.cache/polybar/main.log 2>&1 &
 echo "[*] Polybar launched (PID $!)"
-EOF
+LEOF
 chmod +x "$POLYBAR_DIR/launch.sh"
 
 # =============================================================================
@@ -458,28 +453,26 @@ echo "[*] Launching Polybar..."
 "$POLYBAR_DIR/launch.sh"
 sleep 2
 
-# Verify it started
 if pgrep -x polybar >/dev/null; then
     echo ""
     echo "=================================================="
     echo " POLYBAR RUNNING"
     echo "=================================================="
+    echo ""
+    echo " Layout:"
+    echo "  LEFT:   ⠿  $NET_INTERFACE IP  ⛨ Disconnected/Connected"
+    echo "  CENTER: ● ○ ○ ○ ○ ○ ○ ○ ○ ○  (bspwm dots)"
+    echo "  RIGHT:  ⊙ No target | ♪ vol% | ⏱ time | ⏻"
+    echo ""
+    echo " Target module:"
+    echo "  Left-click  → prompt for IP via rofi"
+    echo "  Right-click → clear"
+    echo "  Manual:  echo '10.10.11.1' > ~/.target"
+    echo ""
+    echo " Log: ~/.cache/polybar/main.log"
 else
     echo ""
-    echo "[!] Polybar failed — check log:"
-    cat ~/.cache/polybar/main.log 2>/dev/null || true
+    echo "[!] Polybar failed to start. Log:"
+    cat "$CACHE_DIR/main.log" 2>/dev/null || true
     exit 1
 fi
-
-echo ""
-echo " Layout:"
-echo "  LEFT:   ⠿ menu  |  IP address  |  shield + Disconnected/Connected"
-echo "  CENTER: ● ○ ○ ○ ○ ○ ○ ○ ○ ○   (bspwm dot workspaces)"
-echo "  RIGHT:  ⊙ No target  |  ♪ vol%  |  ⏱ time  |  ⏻ power"
-echo ""
-echo " Target module:"
-echo "  Left-click  → prompt for IP  (echo '10.10.11.1' > ~/.target)"
-echo "  Right-click → clear target   (echo '' > ~/.target)"
-echo ""
-echo " Log: ~/.cache/polybar/main.log"
-echo ""
