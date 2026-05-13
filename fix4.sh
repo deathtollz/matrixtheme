@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # =============================================================================
-# COMPLETE MATRIX POLYBAR PURGE + REBUILD
-# FULLY removes ALL existing Polybar configs/cache/processes
-# then installs a fresh Adi1090x-style Matrix Polybar
+# MATRIX POLYBAR REBUILD
+# Based on the provided modern Polybar config
+# FULLY removes old Polybar configs/files and rebuilds from scratch
 # =============================================================================
 
 set -euo pipefail
@@ -10,63 +10,38 @@ set -euo pipefail
 USER_HOME="/home/deathtollz"
 
 POLYBAR_DIR="$USER_HOME/.config/polybar"
-CACHE_DIR="$USER_HOME/.cache/polybar"
-LOCAL_DIR="$USER_HOME/.local/share/polybar"
-
 ROFI_DIR="$USER_HOME/.config/rofi"
-SCRIPT_DIR="$ROFI_DIR/scripts"
+
+SCRIPT_DIR="$POLYBAR_DIR/scripts"
 
 echo "=================================================="
-echo " COMPLETE MATRIX POLYBAR REBUILD"
+echo " MATRIX POLYBAR MODERN REBUILD"
 echo "=================================================="
 
 sleep 2
 
 # =============================================================================
-# STOP ALL POLYBAR INSTANCES
+# REMOVE EVERYTHING OLD
 # =============================================================================
 
-echo "[*] Killing Polybar..."
+echo "[*] Killing old Polybar..."
 
 pkill -9 polybar 2>/dev/null || true
 
 sleep 1
 
-# =============================================================================
-# REMOVE OLD CONFIGS
-# =============================================================================
-
-echo "[*] Removing old Polybar files..."
+echo "[*] Removing ALL old Polybar files..."
 
 rm -rf "$POLYBAR_DIR"
-rm -rf "$CACHE_DIR"
-rm -rf "$LOCAL_DIR"
-
-# Remove possible stray configs
-rm -rf "$USER_HOME/.config/bspwm/polybar"
-rm -rf "$USER_HOME/.config/polybar.old"
-rm -rf "$USER_HOME/.config/polybar.bak"
-
-# Remove launch scripts that may restart old bars
-find "$USER_HOME/.config" -type f \( \
--name "launch.sh" -o \
--name "polybar.sh" \
-\) -exec rm -f {} \; 2>/dev/null || true
-
-# =============================================================================
-# CREATE CLEAN STRUCTURE
-# =============================================================================
-
-echo "[*] Creating fresh config..."
+rm -rf "$USER_HOME/.cache/polybar"
+rm -rf "$USER_HOME/.local/share/polybar"
 
 mkdir -p "$POLYBAR_DIR"
 mkdir -p "$SCRIPT_DIR"
 
 # =============================================================================
-# INSTALL REQUIRED PACKAGES
+# INSTALL DEPENDENCIES
 # =============================================================================
-
-echo "[*] Installing required packages..."
 
 if command -v pacman >/dev/null 2>&1; then
     sudo pacman -S --needed --noconfirm \
@@ -76,32 +51,152 @@ if command -v pacman >/dev/null 2>&1; then
         network-manager-applet \
         pulseaudio \
         pavucontrol \
-        ttf-jetbrains-mono-nerd \
-        noto-fonts \
-        kitty \
-        thunar
+        jq \
+        curl \
+        xclip \
+        ttf-hack-nerd \
+        redshift
 fi
 
 # =============================================================================
-# ROFI LAUNCHER
+# MATRIX COLORS
 # =============================================================================
 
-cat > "$SCRIPT_DIR/launcher.sh" << 'EOF'
-#!/usr/bin/env bash
+cat > "$POLYBAR_DIR/colors.ini" << 'EOF'
+[colors]
 
-rofi \
--no-config \
--theme ~/.config/rofi/themes/matrix.rasi \
--show drun
+background = #050805
+foreground = #88FF88
+
+disabled = #1A331A
+
+green = #00FF41
+green_soft = #44CC44
+green_dark = #2FAF2F
+
+white = #E8FFE8
+
+alert = #AAFF44
+warning = #88FF88
+accent = #00FF41
 EOF
 
-chmod +x "$SCRIPT_DIR/launcher.sh"
-
 # =============================================================================
-# ROFI POWERMENU
+# INTERNET STATUS SCRIPT
 # =============================================================================
 
-cat > "$SCRIPT_DIR/powermenu.sh" << 'EOF'
+cat > "$SCRIPT_DIR/internet-status.sh" << 'EOF'
+#!/usr/bin/env bash
+
+if ping -c 1 8.8.8.8 >/dev/null 2>&1; then
+    echo "ONLINE"
+else
+    echo "OFFLINE"
+fi
+EOF
+
+chmod +x "$SCRIPT_DIR/internet-status.sh"
+
+# =============================================================================
+# VPN STATUS SCRIPT
+# =============================================================================
+
+cat > "$SCRIPT_DIR/vpn-status.sh" << 'EOF'
+#!/usr/bin/env bash
+
+if ip a | grep -qi tun0; then
+    echo "VPN ON"
+else
+    echo "VPN OFF"
+fi
+EOF
+
+chmod +x "$SCRIPT_DIR/vpn-status.sh"
+
+# =============================================================================
+# SCOPE STATUS SCRIPT
+# =============================================================================
+
+cat > "$SCRIPT_DIR/scope-status.sh" << 'EOF'
+#!/usr/bin/env bash
+
+echo "MATRIX"
+EOF
+
+chmod +x "$SCRIPT_DIR/scope-status.sh"
+
+# =============================================================================
+# COLOR TEMPERATURE SCRIPT
+# =============================================================================
+
+cat > "$SCRIPT_DIR/color-temperature-control.sh" << 'EOF'
+#!/usr/bin/env bash
+
+TEMP_FILE="/tmp/matrix_temp"
+
+[[ ! -f "$TEMP_FILE" ]] && echo 4500 > "$TEMP_FILE"
+
+TEMP=$(cat "$TEMP_FILE")
+
+case "$1" in
+
+    temperature)
+        echo "TEMP ${TEMP}K"
+        ;;
+
+    increase)
+        TEMP=$((TEMP + 100))
+        echo "$TEMP" > "$TEMP_FILE"
+        redshift -P -O "$TEMP" >/dev/null 2>&1
+        ;;
+
+    decrease)
+        TEMP=$((TEMP - 100))
+        echo "$TEMP" > "$TEMP_FILE"
+        redshift -P -O "$TEMP" >/dev/null 2>&1
+        ;;
+
+    toggle)
+        redshift -x >/dev/null 2>&1
+        ;;
+esac
+EOF
+
+chmod +x "$SCRIPT_DIR/color-temperature-control.sh"
+
+# =============================================================================
+# COPY LOCAL IP
+# =============================================================================
+
+cat > "$SCRIPT_DIR/copy-local-ip.sh" << 'EOF'
+#!/usr/bin/env bash
+
+hostname -I | awk '{print $1}' | xclip -selection clipboard
+EOF
+
+chmod +x "$SCRIPT_DIR/copy-local-ip.sh"
+
+# =============================================================================
+# COPY VPN IP
+# =============================================================================
+
+cat > "$SCRIPT_DIR/copy-vpn-ip.sh" << 'EOF'
+#!/usr/bin/env bash
+
+ip addr show tun0 2>/dev/null | \
+grep "inet " | awk '{print $2}' | cut -d/ -f1 | \
+xclip -selection clipboard
+EOF
+
+chmod +x "$SCRIPT_DIR/copy-vpn-ip.sh"
+
+# =============================================================================
+# ROFI POWER MENU
+# =============================================================================
+
+mkdir -p "$ROFI_DIR/power-menu"
+
+cat > "$ROFI_DIR/power-menu/power-menu.sh" << 'EOF'
 #!/usr/bin/env bash
 
 chosen=$(printf "LOCK\nSLEEP\nLOGOUT\nRESTART\nSHUTDOWN" | \
@@ -136,256 +231,117 @@ case "$chosen" in
 esac
 EOF
 
-chmod +x "$SCRIPT_DIR/powermenu.sh"
+chmod +x "$ROFI_DIR/power-menu/power-menu.sh"
 
 # =============================================================================
-# MAIN CONFIG
+# ROFI LAUNCHER
 # =============================================================================
 
-cat > "$POLYBAR_DIR/config.ini" << 'EOF'
-[global/wm]
-margin-top = 0
-margin-bottom = 0
+mkdir -p "$ROFI_DIR/launcher"
 
-; =============================================================================
-; COLORS
-; =============================================================================
+cat > "$ROFI_DIR/launcher/launcher.sh" << 'EOF'
+#!/usr/bin/env bash
 
-[color]
+rofi \
+-no-config \
+-theme ~/.config/rofi/themes/matrix.rasi \
+-show drun
+EOF
 
-bg = #050805
-bg-alt = #101510
+chmod +x "$ROFI_DIR/launcher/launcher.sh"
 
-fg = #88FF88
-fg-alt = #44CC44
+# =============================================================================
+# MAIN POLYBAR CONFIG
+# =============================================================================
 
-green = #00FF41
-green-soft = #44CC44
-green-dark = #2FAF2F
+cat > "$POLYBAR_DIR/config.ini" << EOF
+include-file = ~/.config/polybar/colors.ini
 
-white = #E8FFE8
-black = #000000
-
-alert = #AAFF44
-
-; =============================================================================
-; BAR
-; =============================================================================
-
-[bar/main]
+[bar/primary]
 
 width = 100%
-height = 30
+height = 32
 
-offset-x = 0
-offset-y = 0
+background = \${colors.background}
+foreground = \${colors.foreground}
 
-background = ${color.bg}
-foreground = ${color.fg}
+line-size = 2
 
-radius-top = 0
-radius-bottom = 0
+padding-left = 0
+padding-right = 0
 
-padding = 0
+module-margin = 0
 
-module-margin-left = 0
-module-margin-right = 0
+separator = ""
 
-font-0 = "Noto Sans:size=9;3"
-font-1 = "JetBrainsMono Nerd Font:size=12;3"
-font-2 = "JetBrainsMono Nerd Font:size=16;4"
+font-0 = "Hack Nerd Font:size=13;3"
+font-1 = "Hack Nerd Font:size=17;3"
 
-modules-left = menu sep2 term web files settings
-modules-center = date
-modules-right = sep cpu memory alsa battery network sep sysmenu
-
-separator =
-
-wm-restack = bspwm
-enable-ipc = true
+modules-left = launcher internet_status vpn scope_manager
+modules-center = xworkspaces
+modules-right = pulseaudio date color_temperature power_menu
 
 cursor-click = pointer
+cursor-scroll = pointer
 
-tray-position = none
+enable-ipc = true
 
-; =============================================================================
-; MENU
-; =============================================================================
+wm-restack = bspwm
 
-[module/menu]
-type = custom/text
-
-content = "MENU"
-
-content-background = ${color.green}
-content-foreground = ${color.black}
-content-padding = 3
-
-click-left = ~/.config/rofi/scripts/launcher.sh
+pseudo-transparency = true
 
 ; =============================================================================
-; POWER
+; WORKSPACES
 ; =============================================================================
 
-[module/sysmenu]
-type = custom/text
+[module/xworkspaces]
+type = internal/xworkspaces
 
-content = "POWER"
+label-active = "◆"
+label-active-font = 2
+label-active-padding = 1
+label-active-underline = \${colors.green}
 
-content-background = ${color.bg-alt}
-content-foreground = ${color.green}
-content-padding = 3
+label-occupied = "❖"
+label-occupied-font = 2
+label-occupied-padding = 1
 
-click-left = ~/.config/rofi/scripts/powermenu.sh
-
-; =============================================================================
-; SEPARATORS
-; =============================================================================
-
-[module/sep]
-type = custom/text
-
-content = |
-content-foreground = ${color.green-dark}
-content-background = ${color.bg-alt}
-content-padding = 1
-
-[module/sep2]
-type = custom/text
-
-content = |
-content-foreground = ${color.bg}
-content-background = ${color.bg}
-content-padding = 1
-
-; =============================================================================
-; APPS
-; =============================================================================
-
-[module/term]
-type = custom/text
-
-content = TERM
-content-foreground = ${color.green}
-content-padding = 3
-
-click-left = kitty &
-
-[module/web]
-type = custom/text
-
-content = WEB
-content-foreground = ${color.green-soft}
-content-padding = 3
-
-click-left = firefox &
-
-[module/files]
-type = custom/text
-
-content = FILES
-content-foreground = ${color.white}
-content-padding = 3
-
-click-left = thunar &
-
-[module/settings]
-type = custom/text
-
-content = CFG
-content-foreground = ${color.alert}
-content-padding = 3
-
-click-left = xfce4-settings-manager &
-
-; =============================================================================
-; CPU
-; =============================================================================
-
-[module/cpu]
-type = internal/cpu
-
-interval = 2
-
-format-background = ${color.bg-alt}
-format-padding = 2
-
-label = CPU %percentage%%
-
-; =============================================================================
-; MEMORY
-; =============================================================================
-
-[module/memory]
-type = internal/memory
-
-interval = 2
-
-format-background = ${color.bg-alt}
-format-padding = 2
-
-label = RAM %percentage_used%%
+label-empty = "◇"
+label-empty-font = 2
+label-empty-padding = 1
+label-empty-foreground = \${colors.white}
 
 ; =============================================================================
 ; AUDIO
 ; =============================================================================
 
-[module/alsa]
+[module/pulseaudio]
 type = internal/pulseaudio
 
-format-volume-background = ${color.bg-alt}
-format-volume-padding = 2
+use-ui-max = false
 
-label-volume = VOL %percentage%%
+format-volume = "<label-volume><bar-volume> %{F#1A331A}|"
 
-label-muted = MUTED
-label-muted-foreground = ${color.fg-alt}
+label-volume = "  VOL "
+label-volume-foreground = \${colors.green}
 
-; =============================================================================
-; BATTERY
-; =============================================================================
+format-muted-prefix = "  MUTED "
+format-muted-foreground = \${colors.green_soft}
 
-[module/battery]
-type = internal/battery
+label-muted = "%{F#E8FFE8}Muted %{F#1A331A}|"
 
-battery = BAT0
-adapter = AC
+interval = 5
 
-poll-interval = 2
-full-at = 99
+bar-volume-width = 11
+bar-volume-foreground-0 = \${colors.green}
 
-format-charging-background = ${color.bg-alt}
-format-charging-padding = 2
+bar-volume-gradient = false
 
-format-discharging-background = ${color.bg-alt}
-format-discharging-padding = 2
+bar-volume-indicator = ""
+bar-volume-fill = "━"
+bar-volume-empty = "━"
 
-format-full-background = ${color.bg-alt}
-format-full-padding = 2
-
-label-charging = CHG %percentage%%
-label-discharging = BAT %percentage%%
-label-full = FULL
-
-; =============================================================================
-; NETWORK
-; =============================================================================
-
-[module/network]
-type = internal/network
-
-interface-type = wireless
-
-interval = 1
-
-format-connected-background = ${color.bg-alt}
-format-connected-padding = 2
-
-format-disconnected-background = ${color.bg-alt}
-format-disconnected-padding = 2
-
-label-connected = ONLINE
-label-disconnected = OFFLINE
+bar-volume-empty-foreground = \${colors.white}
 
 ; =============================================================================
 ; DATE
@@ -396,12 +352,102 @@ type = internal/date
 
 interval = 1
 
-time = %I:%M %p
+date = %H:%M
 
-format-background = ${color.bg-alt}
-format-padding = 2
+label = " TIME %date% "
 
-label = %time%
+label-foreground = \${colors.green_soft}
+
+; =============================================================================
+; INTERNET
+; =============================================================================
+
+[module/internet_status]
+type = custom/script
+
+interval = 5
+
+exec = ~/.config/polybar/scripts/internet-status.sh
+
+click-left = ~/.config/polybar/scripts/copy-local-ip.sh
+
+format = " %output% "
+
+; =============================================================================
+; VPN
+; =============================================================================
+
+[module/vpn]
+type = custom/script
+
+interval = 5
+
+exec = ~/.config/polybar/scripts/vpn-status.sh
+
+click-left = ~/.config/polybar/scripts/copy-vpn-ip.sh
+
+format = " %output% "
+
+; =============================================================================
+; SCOPE
+; =============================================================================
+
+[module/scope_manager]
+type = custom/script
+
+interval = 5
+
+exec = ~/.config/polybar/scripts/scope-status.sh
+
+format = " %output% "
+
+; =============================================================================
+; LAUNCHER
+; =============================================================================
+
+[module/launcher]
+type = custom/text
+
+format = " MENU "
+
+format-foreground = \${colors.white}
+
+click-left = ~/.config/rofi/launcher/launcher.sh
+
+; =============================================================================
+; POWER MENU
+; =============================================================================
+
+[module/power_menu]
+type = custom/text
+
+format = " POWER "
+
+format-foreground = \${colors.alert}
+
+click-left = ~/.config/rofi/power-menu/power-menu.sh
+
+; =============================================================================
+; COLOR TEMP
+; =============================================================================
+
+[module/color_temperature]
+type = custom/script
+
+exec = bash -c "~/.config/polybar/scripts/color-temperature-control.sh temperature"
+
+click-left = bash -c "~/.config/polybar/scripts/color-temperature-control.sh toggle"
+
+scroll-up = bash -c "~/.config/polybar/scripts/color-temperature-control.sh increase"
+
+scroll-down = bash -c "~/.config/polybar/scripts/color-temperature-control.sh decrease"
+
+interval = 1
+
+[settings]
+
+screenchange-reload = true
+pseudo-transparency = true
 EOF
 
 # =============================================================================
@@ -415,13 +461,13 @@ pkill -9 polybar 2>/dev/null || true
 
 sleep 1
 
-polybar main &
+polybar primary &
 EOF
 
 chmod +x "$POLYBAR_DIR/launch.sh"
 
 # =============================================================================
-# START BAR
+# START POLYBAR
 # =============================================================================
 
 echo "[*] Starting Matrix Polybar..."
@@ -430,17 +476,22 @@ echo "[*] Starting Matrix Polybar..."
 
 echo ""
 echo "=================================================="
-echo " MATRIX POLYBAR SUCCESSFULLY INSTALLED"
+echo " MATRIX POLYBAR INSTALLED"
 echo "=================================================="
 echo ""
-echo "Everything old was removed:"
+echo "FEATURES:"
 echo ""
-echo " • old configs"
-echo " • old modules"
-echo " • old launchers"
-echo " • old powermenus"
-echo " • old cache"
-echo " • old broken themes"
+echo " • Modern clean layout"
+echo " • Matrix green theme"
+echo " • Animated volume bar"
+echo " • Workspace diamonds"
+echo " • VPN status"
+echo " • Internet status"
+echo " • Color temperature control"
+echo " • Matrix Rofi launcher"
+echo " • Matrix power menu"
 echo ""
-echo "Fresh Matrix bar is now active."
+echo "RUN MANUALLY:"
+echo ""
+echo "    ~/.config/polybar/launch.sh"
 echo ""
