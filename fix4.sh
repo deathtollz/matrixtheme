@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
-# =============================================================================
-# FORCE FIX POLYBAR POWER BUTTON
-# =============================================================================
 
 set -e
 
 USER_HOME="/home/deathtollz"
 
-POLYBAR_DIR="$USER_HOME/.config/polybar"
+POLYBAR="$USER_HOME/.config/polybar"
+CONFIG="$POLYBAR/config.ini"
 
-POWER_SCRIPT="$USER_HOME/.config/rofi/scripts/powermenu.sh"
+mkdir -p "$POLYBAR"
 
-echo "[*] Creating Matrix power menu script..."
+# =============================================================================
+# CREATE POWERMENU SCRIPT
+# =============================================================================
 
-mkdir -p "$(dirname "$POWER_SCRIPT")"
+mkdir -p ~/.config/rofi/scripts
 
-cat > "$POWER_SCRIPT" << 'EOF'
+cat > ~/.config/rofi/scripts/powermenu.sh << 'EOF'
 #!/usr/bin/env bash
 
 chosen=$(printf " Lock\n Sleep\n Logout\n Restart\n Shutdown" | \
@@ -45,62 +45,73 @@ case "$chosen" in
 esac
 EOF
 
-chmod +x "$POWER_SCRIPT"
+chmod +x ~/.config/rofi/scripts/powermenu.sh
 
-echo "[✔] Powermenu script created"
+# =============================================================================
+# CREATE CLEAN MODULE
+# =============================================================================
 
-echo ""
-echo "[*] Scanning ALL Polybar configs..."
-echo ""
+cat > "$POLYBAR/powermenu.ini" << 'EOF'
+[module/powermenu]
+type = custom/text
 
-find "$POLYBAR_DIR" -type f \( -name "*.ini" -o -name "*.conf" \) | while read -r file; do
+content = ⏻
+content-font = 2
+content-padding = 2
 
-    echo "Checking: $file"
+content-foreground = #00FF41
 
-    cp "$file" "$file.bak"
+click-left = ~/.config/rofi/scripts/powermenu.sh
+EOF
 
-    # Replace ALL known logout/power commands
+# =============================================================================
+# FORCE IMPORT MODULE
+# =============================================================================
+
+grep -q "powermenu.ini" "$CONFIG" || \
+echo "include-file = ~/.config/polybar/powermenu.ini" >> "$CONFIG"
+
+# =============================================================================
+# FORCE BAR TO USE IT
+# =============================================================================
+
+sed -i \
+'s/modules-right = .*/modules-right = cpu memory wlan pulseaudio powermenu/g' \
+"$CONFIG"
+
+# =============================================================================
+# REMOVE XFCE LOGOUTS
+# =============================================================================
+
+find "$POLYBAR" -type f | while read -r file; do
     sed -i \
-        -e 's|click-left *= *.*xfce4-session-logout.*|click-left = ~/.config/rofi/scripts/powermenu.sh|g' \
-        -e 's|click-left *= *.*systemctl poweroff.*|click-left = ~/.config/rofi/scripts/powermenu.sh|g' \
-        -e 's|click-left *= *.*systemctl reboot.*|click-left = ~/.config/rofi/scripts/powermenu.sh|g' \
-        -e 's|click-left *= *.*bspc quit.*|click-left = ~/.config/rofi/scripts/powermenu.sh|g' \
-        -e 's|exec *= *.*xfce4-session-logout.*|exec = echo ⏻|g' \
+        's/xfce4-session-logout/#removed/g' \
         "$file"
-
 done
 
-echo ""
-echo "[*] Restarting Polybar..."
+# =============================================================================
+# RESTART
+# =============================================================================
 
 pkill polybar
 sleep 1
 
-if [[ -x "$POLYBAR_DIR/launch.sh" ]]; then
-    bash "$POLYBAR_DIR/launch.sh" &
+if [[ -x ~/.config/polybar/launch.sh ]]; then
+    ~/.config/polybar/launch.sh &
 else
     polybar main &
 fi
 
 echo ""
-echo "========================================="
-echo " POLYBAR POWER BUTTON FORCE-FIXED"
-echo "========================================="
+echo "====================================="
+echo " MATRIX POWERMENU INSTALLED"
+echo "====================================="
 echo ""
-echo "If it STILL does not work:"
+echo "Your RIGHT side modules were replaced with:"
 echo ""
-echo "Your power icon is probably NOT Polybar."
+echo "cpu memory wlan pulseaudio powermenu"
 echo ""
-echo "It may be:"
-echo "  • eww"
-echo "  • xfce panel"
-echo "  • polywins"
-echo "  • a custom script"
+echo "If your bar disappears:"
 echo ""
-echo "To confirm:"
-echo ""
-echo "CTRL + RIGHT CLICK the power button."
-echo ""
-echo "If no Polybar menu appears,"
-echo "it is NOT a Polybar module."
+echo "polybar main"
 echo ""
